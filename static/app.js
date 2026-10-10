@@ -1,0 +1,348 @@
+// static/app.js: everything the page DOES. Runs in the visitor's browser (not in Python).
+//
+// The pattern used everywhere:
+//   1. fetch("/api/...")      -> ask our Flask server (app.py) for data, or send it data
+//   2. await response.json()  -> turn the answer into JavaScript objects
+//   3. update the page        -> build HTML elements and put them on screen
+
+// ======================================================================
+// 5.1 Who is this visitor? (no accounts: a random id saved in the browser)
+// ======================================================================
+// localStorage keeps small values in this browser even after closing the tab.
+// The first visit creates a random id; later visits reuse it, so your follows are remembered.
+function getUserId() {
+  let id = localStorage.getItem("user_id");
+  if (!id) {
+    id = crypto.randomUUID();   // e.g. "3f2b8c1e-..."
+    localStorage.setItem("user_id", id);
+  }
+  return id;
+}
+const USER_ID = getUserId();
+
+// Data we've loaded from the server. "let" = a variable that can change later.
+let clubs = [];
+let events = [];
+let calendar;   // the FullCalendar object, created in setupCalendar()
+
+// ======================================================================
+// 5.2 Small helpers
+// ======================================================================
+
+// Shortcut: $("#calendar") instead of document.querySelector("#calendar")
+const $ = (selector) => document.querySelector(selector);
+
+// Call our API and return the JSON. Throws an Error with the server's message if it fails,
+// so callers can show it (app.py sends errors as {"error": "..."}).
+async function api(url, options = {}) {
+  const response = await fetch(url, options);
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data.error || `Request failed (${response.status})`);
+  return data;
+}
+
+// Safely put text inside HTML. Without this, a club description containing "<script>"
+// would RUN as code on the page (a security bug called XSS). This turns < into &lt; etc.
+function esc(text) {
+  const div = document.createElement("div");
+  div.textContent = text ?? "";
+  return div.innerHTML;
+}
+
+// Give each club its own consistent color: turn the club id into a number (a "hash"),
+// then into a hue on the color wheel. Same id -> same color every time.
+function clubColor(clubId) {
+  let hash = 0;
+  for (const ch of clubId) hash = (hash * 31 + ch.charCodeAt(0)) % 360;
+  return `hsl(${hash}, 65%, 45%)`;
+}
+
+// "2026-10-14T19:30" -> "Wed, Oct 14 · 7:30 PM"
+function prettyDate(start) {
+  return new Date(start).toLocaleString("en-US", {
+    weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit",
+  }).replace(/, (\d+:)/, " · $1");   // "Wed, Oct 14, 7:30 PM" -> "Wed, Oct 14 · 7:30 PM"
+}
+
+// Link that opens Google Calendar's "new event" screen, pre-filled.
+function googleCalendarLink(ev) {
+  // Google wants "20261014T193000". Remove "-" and ":" and add seconds.
+  const fmt = (s) => s.replace(/[-:]/g, "") + "00";
+  const end = ev.end || addHour(ev.start);
+  const params = new URLSearchParams({
+    action: "TEMPLATE",
+    text: `${ev.title} · ${ev.club_name}`,
+    dates: `${fmt(ev.start)}/${fmt(end)}`,
+    ctz: "America/New_York",
+    details: [ev.description, ev.source_url].filter(Boolean).join("\n\n"),
+    location: [ev.location, ev.campus].filter(Boolean).join(", "),
+  });
+  return `https://calendar.google.com/calendar/render?${params}`;
+}
+
+// "2026-10-14T19:30" -> "2026-10-14T20:30" (events without an end time last 1 hour)
+function addHour(start) {
+  const d = new Date(start);
+  d.setHours(d.getHours() + 1);
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+// ======================================================================
+// 5.3 Tabs
+// ======================================================================
+function showTab(name) {
+  document.querySelectorAll(".tab").forEach((t) => t.classList.toggle("active", t.dataset.tab === name));
+  document.querySelectorAll(".panel").forEach((p) => p.classList.toggle("hidden", p.id !== `tab-${name}`));
+  // FullCalendar measures its size when drawn; if it was hidden, tell it to re-measure.
+  if (name === "calendar" && calendar) calendar.updateSize();
+}
+
+document.querySelectorAll(".tab").forEach((tab) => {
+  tab.addEventListener("click", () => showTab(tab.dataset.tab));
+});
+// Links like <a data-goto="discover"> also switch tabs.
+document.addEventListener("click", (e) => {
+  const link = e.target.closest("[data-goto]");
+  if (link) { e.preventDefault(); showTab(link.dataset.goto); }
+});
+
+// ======================================================================
+// 5.4 Calendar tab
+// ======================================================================
+function setupCalendar() {
+  // FullCalendar is the library loaded in index.html.
+  calendar = new FullCalendar.Calendar($("#calendar"), {
+    initialView: window.innerWidth < 700 ? "listWeek" : "dayGridMonth",
+    headerToolbar: { left: "prev,next today", center: "title", right: "dayGridMonth,timeGridWeek,listWeek" },
+    height: "auto",
+    nowIndicator: true,
+    // Instead of a fixed list, we give FullCalendar a FUNCTION. It calls it whenever it
+    // needs events (on load and when we call calendar.refetchEvents()), so filters apply instantly.
+    events: (info, success) => success(filteredEvents().map(toCalendarEvent)),
+    eventClick: (info) => openEvent(info.event.extendedProps.raw),
+  });
+  calendar.render();
+}
+
+// Convert one of our events into the format FullCalendar expects.
+function toCalendarEvent(ev) {
+  return {
+    id: String(ev.id),
+    title: (ev.free_food ? "🍕 " : "") + ev.title,
+    start: ev.start,
+    end: ev.end || undefined,
+    color: clubColor(ev.club_id),
+    extendedProps: { raw: ev },   // keep the full event so the popup can show everything
+  };
+}
+
+// Apply the checkboxes / campus dropdown to the event list.
+function filteredEvents() {
+  const followedIds = new Set(clubs.filter((c) => c.followed).map((c) => c.id));
+  const onlyFollowed = $("#only-followed").checked;
+  const onlyFood = $("#only-food").checked;
+  const campus = $("#campus-filter").value;
+
+  return events.filter((ev) =>
+    (!onlyFollowed || followedIds.has(ev.club_id)) &&
+    (!onlyFood || ev.free_food) &&
+    (!campus || ev.campus === campus)
+  );
+}
+
+function refreshCalendar() {
+  if (!calendar) return;
+  calendar.refetchEvents();
+  const shown = filteredEvents();
+  $("#event-count").textContent = `${shown.length} event${shown.length === 1 ? "" : "s"}`;
+  const followsNone = !clubs.some((c) => c.followed);
+  $("#empty-hint").classList.toggle("hidden", !($("#only-followed").checked && followsNone));
+}
+
+// Any filter change -> redraw.
+["#only-followed", "#only-food", "#campus-filter"].forEach((sel) =>
+  $(sel).addEventListener("change", refreshCalendar)
+);
+
+// The popup with full event details.
+function openEvent(ev) {
+  $("#ev-title").textContent = ev.title;
+  $("#ev-club").textContent = ev.club_name;
+  $("#ev-when").textContent = "🕒 " + prettyDate(ev.start) + (ev.end ? ` to ${prettyDate(ev.end).split(" · ")[1]}` : "");
+  $("#ev-where").textContent = "📍 " + ([ev.location, ev.campus].filter(Boolean).join(", ") || "Location TBA");
+  $("#ev-food").classList.toggle("hidden", !ev.free_food);
+  $("#ev-desc").textContent = ev.description || "";
+  $("#ev-gcal").href = googleCalendarLink(ev);
+  $("#ev-source").classList.toggle("hidden", !ev.source_url);
+  if (ev.source_url) $("#ev-source").href = ev.source_url;
+  $("#event-dialog").showModal();
+}
+$("#ev-close").addEventListener("click", () => $("#event-dialog").close());
+
+// ======================================================================
+// 5.5 Discover tab: club cards with Follow buttons
+// ======================================================================
+function renderClubs() {
+  const search = $("#club-search").value.toLowerCase();
+  const category = $("#category-filter").value;
+
+  const visible = clubs.filter((c) =>
+    (!category || c.category === category) &&
+    // search across name, description and tags
+    `${c.name} ${c.description} ${c.tags}`.toLowerCase().includes(search)
+  );
+
+  // Build one card per club. `...${}...` is a template string (like a Python f-string).
+  $("#club-grid").innerHTML = visible.map((c) => `
+    <article class="club">
+      <h3>${esc(c.name)}</h3>
+      <div>
+        <span class="chip">${esc(c.category)}</span>
+        ${c.campus ? `<span class="chip">${esc(c.campus)}</span>` : ""}
+      </div>
+      <p>${esc(c.description)}</p>
+      <div class="row">
+        <button class="follow ${c.followed ? "following" : ""}" data-club="${esc(c.id)}">
+          ${c.followed ? "✓ Following" : "+ Follow"}
+        </button>
+        ${c.instagram ? `<a class="button" href="https://instagram.com/${esc(c.instagram)}" target="_blank" rel="noopener">Instagram</a>` : ""}
+        ${c.discord_invite ? `<a class="button" href="${esc(c.discord_invite)}" target="_blank" rel="noopener">Discord</a>` : ""}
+      </div>
+    </article>`).join("") || `<p class="muted">No clubs match.</p>`;
+}
+
+// One click listener on the whole grid handles every Follow button ("event delegation").
+$("#club-grid").addEventListener("click", async (e) => {
+  const button = e.target.closest(".follow");
+  if (!button) return;
+  const club = clubs.find((c) => c.id === button.dataset.club);
+  const follow = !club.followed;
+
+  await api("/api/follow", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ user_id: USER_ID, club_id: club.id, follow }),
+  });
+  club.followed = follow ? 1 : 0;
+  renderClubs();
+  refreshCalendar();
+});
+
+$("#club-search").addEventListener("input", renderClubs);
+$("#category-filter").addEventListener("change", renderClubs);
+
+// ======================================================================
+// 5.6 Add Event tab: flyer/caption -> Gemini -> review -> save
+// ======================================================================
+const CAMPUSES = ["", "Busch", "Livingston", "College Ave", "Cook/Douglass", "Online", "Other"];
+
+$("#extract-form").addEventListener("submit", async (e) => {
+  e.preventDefault();   // stop the browser's default "reload the page" form behavior
+  const button = $("#extract-btn");
+  const results = $("#extract-results");
+  button.disabled = true;
+  button.textContent = "Reading with Gemini...";
+  results.innerHTML = "";
+
+  try {
+    // FormData packs the form's fields AND the uploaded file, ready to send.
+    const data = await api("/api/extract", { method: "POST", body: new FormData(e.target) });
+    if (data.events.length === 0) {
+      results.innerHTML = `<p class="message muted">No event found in that post.</p>`;
+    } else {
+      results.innerHTML = data.events.map(previewForm).join("");
+    }
+  } catch (err) {
+    results.innerHTML = `<p class="message error">${esc(err.message)}</p>`;
+  } finally {
+    // "finally" runs whether it worked or failed: always re-enable the button.
+    button.disabled = false;
+    button.textContent = "✨ Extract with Gemini";
+  }
+});
+
+// An editable card for one extracted event. The user fixes anything Gemini got wrong, then saves.
+function previewForm(ev) {
+  return `
+    <form class="card preview">
+      <label>Title <input name="title" value="${esc(ev.title)}" required></label>
+      <div class="two">
+        <label>Starts <input type="datetime-local" name="start" value="${esc(ev.start)}" required></label>
+        <label>Ends <input type="datetime-local" name="end" value="${esc(ev.end || "")}"></label>
+      </div>
+      <div class="two">
+        <label>Location <input name="location" value="${esc(ev.location)}"></label>
+        <label>Campus
+          <select name="campus">
+            ${CAMPUSES.map((c) => `<option ${c === ev.campus ? "selected" : ""}>${c}</option>`).join("")}
+          </select>
+        </label>
+      </div>
+      <label>Description <textarea name="description" rows="2">${esc(ev.description)}</textarea></label>
+      <label class="toggle"><input type="checkbox" name="free_food" ${ev.free_food ? "checked" : ""}> 🍕 Free food</label>
+      <button type="submit" class="primary">Save to calendar</button>
+    </form>`;
+}
+
+// Saving a reviewed preview card.
+$("#extract-results").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const form = e.target;
+  const f = Object.fromEntries(new FormData(form));   // form fields -> {title: ..., start: ...}
+
+  try {
+    await api("/api/events", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        club_id: $("#add-club").value,
+        title: f.title,
+        start: f.start,
+        end: f.end || null,
+        location: f.location,
+        campus: f.campus,
+        description: f.description,
+        free_food: Boolean(f.free_food),   // unchecked checkboxes are simply missing
+        source: "upload",
+      }),
+    });
+    form.outerHTML = `<p class="message">✅ Saved "${esc(f.title)}" to the calendar.</p>`;
+    await loadEvents();
+  } catch (err) {
+    form.insertAdjacentHTML("beforeend", `<p class="message error">${esc(err.message)}</p>`);
+  }
+});
+
+// ======================================================================
+// 5.7 Loading data and starting up
+// ======================================================================
+async function loadClubs() {
+  clubs = await api(`/api/clubs?user_id=${encodeURIComponent(USER_ID)}`);
+
+  // Fill the category dropdown (Discover) and the club dropdown (Add Event) once.
+  if ($("#category-filter").options.length === 1) {
+    const categories = [...new Set(clubs.map((c) => c.category).filter(Boolean))].sort();
+    $("#category-filter").innerHTML += categories.map((c) => `<option>${esc(c)}</option>`).join("");
+    $("#add-club").innerHTML = clubs.map((c) => `<option value="${esc(c.id)}">${esc(c.name)}</option>`).join("");
+  }
+  renderClubs();
+}
+
+async function loadEvents() {
+  // We load ALL events and filter in the browser, so toggling "Only clubs I follow"
+  // is instant (no new request).
+  events = await api("/api/events");
+  refreshCalendar();
+}
+
+async function start() {
+  setupCalendar();
+  await loadClubs();
+  await loadEvents();
+  // Check for new events every 15 seconds, so an announcement the Discord bot just
+  // picked up appears on screen without refreshing. Great for the live demo.
+  setInterval(loadEvents, 15000);
+}
+
+start();

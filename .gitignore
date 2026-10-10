@@ -1,0 +1,19 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# Secrets: never commit API keys or tokens
+.env
+*.env
+
+# Local database
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# Editor / OS
+.vscode/
+.DS_Store
+Thumbs.db

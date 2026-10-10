@@ -1,0 +1,116 @@
+<!doctype html>
+{#
+  templates/index.html: the whole website is this one page with 3 tabs.
+  Flask fills in anything inside double curly braces before sending it (that's "Jinja", Flask's
+  template language). This block is a Jinja comment: it's removed before the page is sent.
+  The behavior (loading data, clicking buttons) lives in static/app.js.
+  The looks (colors, spacing) live in static/style.css. Your teammate can restyle freely there.
+#}
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ app_name }}: every Rutgers club event in one calendar</title>
+
+  <!-- FullCalendar: a free library that draws the month/week calendar for us. -->
+  <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.js"></script>
+  <!-- url_for('static', ...) builds the right URL to our own files in static/ -->
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">📅 {{ app_name }}</div>
+    <!-- data-tab says which <section> each button opens (see showTab in app.js) -->
+    <nav class="tabs">
+      <button class="tab active" data-tab="calendar">My Calendar</button>
+      <button class="tab" data-tab="discover">Discover Clubs</button>
+      <button class="tab" data-tab="add">Add Event</button>
+    </nav>
+  </header>
+
+  {% if fake_mode %}
+  {# This "if" is Jinja: the banner only appears when GEMINI_FAKE=1 #}
+  <div class="banner">Fake mode is on (GEMINI_FAKE=1): extracted events are made up, Gemini isn't called.</div>
+  {% endif %}
+
+  <main>
+    <!-- ============ TAB 1: CALENDAR ============ -->
+    <section id="tab-calendar" class="panel">
+      <div class="filters">
+        <label class="toggle"><input type="checkbox" id="only-followed" checked> Only clubs I follow</label>
+        <label class="toggle"><input type="checkbox" id="only-food"> 🍕 Free food</label>
+        <select id="campus-filter">
+          <option value="">All campuses</option>
+          <option>Busch</option>
+          <option>Livingston</option>
+          <option>College Ave</option>
+          <option>Cook/Douglass</option>
+          <option>Online</option>
+        </select>
+        <span id="event-count" class="muted"></span>
+      </div>
+      <p id="empty-hint" class="hint hidden">
+        You're not following any clubs yet. Go to <a href="#" data-goto="discover">Discover Clubs</a> and follow a few.
+      </p>
+      <div id="calendar"></div>
+    </section>
+
+    <!-- ============ TAB 2: DISCOVER ============ -->
+    <section id="tab-discover" class="panel hidden">
+      <div class="recommend card">
+        <h2>Not sure where to start?</h2>
+        <p class="muted">Tell us what you're into and we'll suggest clubs. (Coming in step 8.)</p>
+        <div class="row">
+          <input id="interests" placeholder="e.g. I want to get into software engineering and meet people" disabled>
+          <button disabled>Recommend</button>
+        </div>
+      </div>
+      <div class="filters">
+        <input id="club-search" placeholder="Search clubs, e.g. coding, dance, debate...">
+        <select id="category-filter"><option value="">All categories</option></select>
+      </div>
+      <div id="club-grid" class="grid"></div>
+    </section>
+
+    <!-- ============ TAB 3: ADD EVENT ============ -->
+    <section id="tab-add" class="panel hidden">
+      <div class="card narrow">
+        <h2>Add an event from a flyer or post</h2>
+        <p class="muted">Upload an Instagram flyer screenshot and/or paste the caption. Gemini reads it and fills in the event for you to check.</p>
+        <!-- A <form> groups the inputs. JavaScript sends it to /api/extract (we stop the normal page reload). -->
+        <form id="extract-form">
+          <label>Club
+            <select name="club_id" id="add-club" required></select>
+          </label>
+          <label>Caption / announcement text
+            <textarea name="text" rows="4" placeholder="Paste the Instagram caption or Discord message here"></textarea>
+          </label>
+          <label>Flyer image (optional)
+            <input type="file" name="image" accept="image/*">
+          </label>
+          <button type="submit" id="extract-btn" class="primary">✨ Extract with Gemini</button>
+        </form>
+        <div id="extract-results"></div>
+      </div>
+    </section>
+  </main>
+
+  <!-- ============ EVENT DETAILS POPUP ============ -->
+  <!-- <dialog> is a built-in HTML popup. app.js opens it with .showModal() -->
+  <dialog id="event-dialog">
+    <h2 id="ev-title"></h2>
+    <p id="ev-club" class="muted"></p>
+    <p id="ev-when"></p>
+    <p id="ev-where"></p>
+    <p id="ev-food" class="hidden">🍕 Free food</p>
+    <p id="ev-desc"></p>
+    <div class="row">
+      <a id="ev-gcal" class="button primary" target="_blank" rel="noopener">Add to Google Calendar</a>
+      <a id="ev-source" class="button" target="_blank" rel="noopener">View original post</a>
+      <button id="ev-close" class="button">Close</button>
+    </div>
+  </dialog>
+
+  <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>
