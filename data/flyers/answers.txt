@@ -1,0 +1,113 @@
+FLYER ANSWER KEY
+================
+Collected Oct 10, 2026 from club Instagram accounts in the clubs sheet.
+Answers are what the FLYER IMAGE itself says (that's what Gemini sees).
+If something is only in the caption, it's marked "NOT ON FLYER" with the caption value in brackets.
+Save each screenshot as the filename shown so it lines up with this key.
+
+Format:
+  file | club | post link (slide #)
+  title / date / time / location
+  type: CLEAN or MESSY (+ why)
+
+
+01_rupa_spookeasy.png | RUPA (@ruparutgers) | https://www.instagram.com/p/DeNHQyfB91k/
+  title:    Spookeasy
+  date:     2026-10-13 (flyer says "OCT 13TH", no year)
+  time:     7:00 PM - 9:00 PM
+  location: Busch Student Center MPR
+  type:     CLEAN
+
+02_rusa_pizza_politics_trivia.png | RUSA (@rusa.nb) | https://www.instagram.com/p/DeQx2aRv-yQ/
+  title:    Pizza & Politics Trivia Night
+  date:     2026-10-13 (flyer says "Tuesday, October 13")
+  time:     7:00 PM - 9:00 PM
+  location: Livingston Student Center Coffee House
+  type:     CLEAN (note: same date/time as #01, good for testing overlapping events)
+
+03_res_techstart_timeline.png | Rutgers Entrepreneurial Society (@ruentrepreneurs) | https://www.instagram.com/p/DeSfOKFoGNo/ (SLIDE 2, the "Timeline" slide)
+  title:    TechStart 2026 Pitch Competition
+  date:     2026-10-16 to 2026-10-18 (3-day event)
+              Fri 10/16 - Kickoff, networking, team formation - time: "Evening" (no exact time)
+              Sat 10/17 - Workshops & mentorship - time: "Open" (no exact time)
+              Sun 10/18 - Final pitches, judging, awards - 9:00 AM - 4:00 PM
+  location: Academic Building East, College Avenue Campus
+  type:     MESSY (multi-day, vague times like "Evening"/"Open"; slide 1 has no date at all)
+
+04_rcg_cracking_the_case.png | Rutgers Consulting Group (@rutgersconsulting) | https://www.instagram.com/p/DePKinQEbBF/
+  title:    Cracking the Case Interview
+  date:     2026-10-15 (flyer says "Thursday 15 October, 2026")
+  time:     8:00 PM - 9:00 PM
+  location: Zoom (virtual - "RSVP for the link")
+  type:     CLEAN but tricky (online event, no physical place)
+
+05_ieee_pcb_workshop.png | Rutgers IEEE (@rutgersieee) | https://www.instagram.com/p/DeNBYIzAyFS/
+  title:    PCB Software Workshop
+  date:     2026-10-16 (flyer says "OCT 16" in a stylized font, no year)
+  time:     6:00 PM - 8:00 PM (flyer says "6-8 PM")
+  location: RWH 105 (Richard Weeks Hall, Busch)
+  type:     MESSY (stylized/italic digits, building abbreviation; caption has no date or time, so the info is only in the image)
+
+06_esports_scarlet_knightmare.png | Rutgers Esports (@rutgersesports) | https://www.instagram.com/p/DeKoYmmPFb_/
+  title:    Scarlet Knightmare
+  date:     2026-10-24
+  time:     12:00 PM - 11:00 PM
+  location: Busch Student Center
+  type:     MESSY-ish (key info in small text at the very bottom; long list of small print above it)
+
+07_swe_advocacy_voting.png | SWE (@swerutgers) | https://www.instagram.com/p/DeU7C1dR8Bf/
+  title:    Advocacy and Voting
+  date:     2026-10-13 (flyer says "October 13th 2026")
+  time:     7:00 PM - 8:00 PM
+  location: RWH Concepts Lab 2 (Richard Weeks Hall, Busch)
+  type:     CLEAN (caption only says "Tuesday", but the flyer has the full date)
+
+08_swe_game_night.png | SWE (@swerutgers) | https://www.instagram.com/p/DeKMaC3RljQ/
+  title:    Game Night
+  date:     2026-10-16 (flyer says "OCT 16TH")
+  time:     4:00 PM - 5:30 PM
+  location: Richard Weeks 206
+  type:     CLEAN
+
+09_shpe_career_summit.png | SHPE (@shpe_ru) | https://www.instagram.com/p/DeCuqRUyggs/
+  title:    SHPE-NYC Career Summit
+  date:     2026-10-17 (flyer says "Saturday | October 17", no year)
+  time:     NOT ON FLYER  [caption: 11 AM - 4 PM]
+  location: NOT ON FLYER  [caption: Columbia University]
+  type:     MESSY (missing time and place; tests whether Gemini leaves them blank instead of guessing)
+
+10_msa_october_calendar.png | Rutgers MSA (@rutgersmsa) | https://www.instagram.com/p/Dd78v_Oy-wY/
+  title:    MSA October Calendar (many events on one image)
+  time:     NO TIMES listed for any event
+  upcoming events in the next two weeks (all 2026):
+    10-13  Socials: Kickoff                - CA/LIVI MPR
+    10-15  Ladders: Big/Little             - CA MPR
+    10-19  Adam Hamawy Talk                - (cell also says "Hope Charity Week", location "Table CASC")
+    10-19 to 10-23  Hope Charity Week (tabling) - 10/19 Table CASC, 10/20 Table CASC, 10/21 Table CILRU, 10/22 Trayes Hall, 10/23 Cook SC
+  earlier/later events on the same calendar (for completeness):
+    10-01 Socials: Scavenger Hunt - CA MPR
+    10-06 Ladders: Career Readiness (spelled "Carrer" on flyer) - CA MPR
+    10-08 MSA: Cultures of the World - Livi MPR
+    10-27 Submissions: Art Night - Trayes Hall
+    10-29 Muslim Identity on College Campus - Livi MPR
+  type:     MESSY (tiny text, calendar grid, abbreviations like CA/LIVI/CASC, a typo, no times)
+
+11_philosophy_club_10-5.png | RU Philosophy Club (@rutgersphilosophyclub) | https://www.instagram.com/p/DeHVRMAHNc3/
+  title:    Philosophy Club Meeting on "Basic Human Empathy" and Ethics
+  date:     2026-10-05 (flyer says only "10/5", no weekday/year)  [ALREADY PASSED]
+  time:     NOT ON FLYER  [caption: 7:15]
+  location: Scott Hall 205 - College Ave
+  type:     MESSY (numeric date, no time; caption topic differs from flyer)
+
+12_msa_cultures_of_the_world.png | Rutgers MSA (@rutgersmsa) | https://www.instagram.com/p/DeJE03CSs8r/
+  title:    Cultures of the World
+  date:     2026-10-08 (flyer says "Oct 8.", no year)  [ALREADY PASSED]
+  time:     6:30 PM (start only, no end time)
+  location: Livingston Student Center MPR (flyer says "LIVI Student Center MPR")
+  type:     MESSY-light (abbreviation "LIVI", no end time; caption says "THIS THURSDAY")
+
+
+SUMMARY
+- 10 upcoming (Oct 13-24), will show on the calendar during judging: #01-#10
+- 2 already passed but useful as messy examples: #11, #12
+- Clean: 01, 02, 04, 07, 08 | Messy: 03, 05, 06, 09, 10, 11, 12
