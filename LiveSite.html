@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Brand Name</title>
+  <style>
+    :root {
+      --bg: #f5f7fb;
+      --panel: #ffffff;
+      --primary: #3b82f6;
+      --primary-dark: #1d4ed8;
+      --text: #1f2937;
+      --muted: #6b7280;
+      --border: #e5e7eb;
+      --accent: #eff6ff;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: Arial, Helvetica, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+    }
+
+    .container {
+      width: min(1100px, 90vw);
+      margin: 0 auto;
+    }
+
+    header {
+      background: rgba(255, 255, 255, 0.9);
+      border-bottom: 1px solid var(--border);
+      position: sticky;
+      top: 0;
+      backdrop-filter: blur(8px);
+    }
+
+    nav {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 1rem 0;
+    }
+
+    .brand {
+      font-size: 1.3rem;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    .nav-links {
+      display: flex;
+      gap: 1.5rem;
+      align-items: center;
+    }
+
+    .nav-links a {
+      color: var(--text);
+      text-decoration: none;
+      font-size: 0.95rem;
+    }
+
+    .nav-links .button,
+    .hero-actions .button {
+      display: inline-block;
+      padding: 0.8rem 1.2rem;
+      border-radius: 999px;
+      text-decoration: none;
+      font-weight: 600;
+      transition: 0.2s ease;
+    }
+
+    .nav-links .button,
+    .hero-actions .primary {
+      background: var(--primary);
+      color: #fff;
+    }
+
+    .hero-actions .secondary {
+      background: #fff;
+      border: 1px solid var(--border);
+      color: var(--text);
+    }
+
+    .nav-links .button:hover,
+    .hero-actions .button:hover {
+      transform: translateY(-1px);
+      background: var(--primary-dark);
+    }
+
+    .hero {
+      padding: 5rem 0 4rem;
+    }
+
+    .hero-grid {
+      display: grid;
+      grid-template-columns: 1.2fr 0.8fr;
+      align-items: center;
+      gap: 2rem;
+    }
+
+    .eyebrow {
+      color: var(--primary-dark);
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      font-size: 0.75rem;
+    }
+
+    h1 {
+      font-size: clamp(2.5rem, 5vw, 4rem);
+      line-height: 1.1;
+      margin: 0.5rem 0 1rem;
+    }
+
+    .lead {
+      font-size: 1.1rem;
+      color: var(--muted);
+      max-width: 620px;
+      margin-bottom: 2rem;
+    }
+
+    .hero-actions {
+      display: flex;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+
+    .hero-card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 2rem;
+      box-shadow: 0 10px 30px rgba(17, 24, 39, 0.06);
+    }
+
+    .mockup {
+      background: linear-gradient(135deg, #dbeafe, #eff6ff);
+      border-radius: 16px;
+      height: 320px;
+      position: relative;
+      overflow: hidden;
+      border: 1px solid rgba(59, 130, 246, 0.15);
+    }
+
+    .mockup .bar,
+    .mockup .box,
+    .mockup .line {
+      position: absolute;
+      left: 1.5rem;
+      right: 1.5rem;
+      border-radius: 10px;
+    }
+
+    .mockup .bar {
+      top: 1.2rem;
+      height: 18px;
+      background: rgba(255,255,255,0.9);
+    }
+
+    .mockup .box {
+      top: 4.5rem;
+      height: 120px;
+      background: rgba(255,255,255,0.7);
+    }
+
+    .mockup .line {
+      top: 10.2rem;
+      height: 14px;
+      background: rgba(59, 130, 246, 0.25);
+    }
+
+    .mockup .line:nth-of-type(2) {
+      top: 12.4rem;
+      width: 72%;
+    }
+
+    .mockup .line:nth-of-type(3) {
+      top: 14.6rem;
+      width: 60%;
+    }
+
+    .features,
+    .about,
+    .cta {
+      padding: 2rem 0 4rem;
+    }
+
+    .section-heading {
+      text-align: center;
+      margin-bottom: 2rem;
+    }
+
+    .section-heading h2 {
+      margin: 0.3rem 0 0.6rem;
+      font-size: clamp(1.8rem, 3vw, 2.5rem);
+    }
+
+    .section-heading p {
+      margin: 0;
+      color: var(--muted);
+    }
+
+    .card-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 1.5rem;
+    }
+
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 1.5rem;
+    }
+
+    .icon {
+      width: 48px;
+      height: 48px;
+      border-radius: 12px;
+      background: var(--accent);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      color: var(--primary-dark);
+      margin-bottom: 1rem;
+    }
+
+    .about-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 2rem;
+      align-items: center;
+    }
+
+    .about-panel {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 2rem;
+    }
+
+    .list {
+      list-style: none;
+      padding: 0;
+      margin: 1rem 0 0;
+    }
+
+    .list li {
+      margin-bottom: 0.8rem;
+      color: var(--muted);
+    }
+
+    .cta-box {
+      background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+      color: #fff;
+      border-radius: 22px;
+      padding: 2.5rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+
+    footer {
+      padding: 1.5rem 0 2.5rem;
+      text-align: center;
+      color: var(--muted);
+      font-size: 0.95rem;
+    }
+
+    @media (max-width: 760px) {
+      .hero-grid,
+      .card-grid,
+      .about-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .nav-links {
+        display: none;
+      }
+
+      .hero {
+        padding-top: 3rem;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="container">
+      <nav>
+        <div class="brand">Brand</div>
+        <div class="nav-links">
+          <a href="#about">About</a>
+          <a href="#features">Features</a>
+          <a href="#contact">Contact</a>
+          <a href="#" class="button">Get Started</a>
+        </div>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero">
+      <div class="container hero-grid">
+        <div>
+          <div class="eyebrow">Your next big idea</div>
+          <h1>Moquito something people remember.</h1>
+          <p class="lead">
+            Replace this text with your value proposition, short description, and a quick reason why your audience should care.
+          </p>
+          <div class="hero-actions">
+            <a href="#contact" class="button primary">Call to Action</a>
+            <a href="#about" class="button secondary">Learn More</a>
+          </div>
+        </div>
+
+        <div class="hero-card">
+          <div class="mockup">
+            <div class="bar"></div>
+            <div class="box"></div>
+            <div class="line"></div>
+            <div class="line"></div>
+            <div class="line"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="features" id="features">
+      <div class="container">
+        <div class="section-heading">
+          <div class="eyebrow">Features</div>
+          <h2>What you offer</h2>
+          <p>Use these cards to highlight your main strengths.</p>
+        </div>
+
+        <div class="card-grid">
+          <article class="card">
+            <div class="icon">01</div>
+            <h3>Feature One</h3>
+            <p>Describe a key benefit, service, or product feature in one or two sentences.</p>
+          </article>
+
+          <article class="card">
+            <div class="icon">02</div>
+            <h3>Feature Two</h3>
+            <p>Explain what makes your offering useful, unique, or different from competitors.</p>
+          </article>
+
+          <article class="card">
+            <div class="icon">03</div>
+            <h3>Feature Three</h3>
+            <p>Show how customers or users will see value in a simple, clear way.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="about" id="about">
+      <div class="container about-grid">
+        <div class="about-panel">
+          <div class="eyebrow">About</div>
+          <h2>Tell people who you are</h2>
+          <p>
+            Add a brief summary of your business, mission, or project. Keep it short and easy to understand.
+          </p>
+          <ul class="list">
+            <li>✔ Replace with your mission statement</li>
+            <li>✔ Add a short company or personal story</li>
+            <li>✔ Mention your target audience or niche</li>
+          </ul>
+        </div>
+
+        <div class="about-panel">
+          <div class="eyebrow">Why us</div>
+          <h2>Why customers choose you</h2>
+          <p>
+            Share your biggest strengths, values, or differentiators. This section is helpful for trust-building.
+          </p>
+          <ul class="list">
+            <li>✔ Fast and reliable service</li>
+            <li>✔ Friendly, professional support</li>
+            <li>✔ Built to solve real problems</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="cta" id="contact">
+      <div class="container">
+        <div class="cta-box">
+          <div>
+            <div class="eyebrow" style="color:#dbeafe;">Ready to get started?</div>
+            <h2 style="margin:0.4rem 0 0;">Let’s build something great together.</h2>
+          </div>
+          <a href="mailto:hello@yourbrand.com" class="button" style="background:#fff; color:var(--primary-dark);">Contact Us</a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    © 2026 Your Brand Name · Replace with your contact info or website URL
+  </footer>
+</body>
+</html>
