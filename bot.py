@@ -147,6 +147,12 @@ async def handle_announcement(message, live=True):
     if club is None:
         return 0
 
+    # Nobody follows this club yet: skip it (it isn't marked as read, so when someone
+    # follows the club later, the catch-up scan will still pick this message up).
+    if club["id"] not in db.get_followed_club_ids():
+        print(f"[bot] {club['name']}: nobody follows this club yet, skipping message {message.id}")
+        return 0
+
     # Each Discord message is read only once, ever (same seen_posts table as the watcher).
     if db.is_post_seen("discord", str(message.id)):
         return 0
@@ -228,8 +234,11 @@ async def catch_up(reason):
     found = 0
     oldest = datetime.now(timezone.utc) - timedelta(days=CATCH_UP_MAX_AGE_DAYS)
     # Every (club, channel) pair we'll read, so we can report "channel 2 of 3".
+    # Only clubs that someone follows (same rule as the watcher).
+    followed = db.get_followed_club_ids()
     channels = [(db.get_club_by_guild(str(g.id)), ch) for g in client.guilds for ch in g.text_channels
-                if is_watched_channel(ch) and db.get_club_by_guild(str(g.id))]
+                if is_watched_channel(ch) and db.get_club_by_guild(str(g.id))
+                and db.get_club_by_guild(str(g.id))["id"] in followed]
 
     def progress(i, current, running=True):
         # Progress file the website reads for its "scanning..." bar.

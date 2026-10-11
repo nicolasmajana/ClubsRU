@@ -306,6 +306,13 @@ def follow(user_id, club_id):
         conn.commit()
 
 
+def get_followed_club_ids():
+    """Ids of every club that at least one user follows. The watcher and bot only scan these."""
+    with closing(get_conn()) as conn:
+        rows = conn.execute("SELECT DISTINCT club_id FROM follows").fetchall()
+    return {row["club_id"] for row in rows}
+
+
 def unfollow(user_id, club_id):
     with closing(get_conn()) as conn:
         conn.execute("DELETE FROM follows WHERE user_id = ? AND club_id = ?",
@@ -425,15 +432,24 @@ SCAN_FLAG = BASE_DIR / "data" / "scan_request.txt"
 def write_status(name, data):
     path = BASE_DIR / "data" / f"status_{name}.json"
     temp = path.with_suffix(".tmp")
-    temp.write_text(json.dumps(data), encoding="utf-8")
     # Write to a temp file, then swap it in: the website never reads a half-written file.
-    temp.replace(path)
+    # On Windows the swap FAILS ("Access is denied") if the website is reading the file at
+    # that exact moment, so try a few times. This file only feeds the progress bar, so if
+    # it still fails we just skip this update: it must NEVER crash the watcher or the bot.
+    for _ in range(5):
+        try:
+            temp.write_text(json.dumps(data), encoding="utf-8")
+            temp.replace(path)
+            return
+        except OSError:
+            time.sleep(0.05)
 
 
 def read_status(name):
     try:
         return json.loads((BASE_DIR / "data" / f"status_{name}.json").read_text(encoding="utf-8"))
-    except (FileNotFoundError, ValueError):
+    except (OSError, ValueError):
+        # Missing, mid-swap ("Permission denied" on Windows) or half-written: no status this time.
         return None
 
 

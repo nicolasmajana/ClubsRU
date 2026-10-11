@@ -213,7 +213,10 @@ def check_all_clubs():
     accounts = load_accounts()
     total_events = 0
     new_posts = 0
-    clubs = db.get_clubs()
+    # Only scan clubs that someone follows: every one of them, on every check.
+    # (Clubs nobody follows are skipped, which also saves Gemini credits.)
+    followed = db.get_followed_club_ids()
+    clubs = [c for c in db.get_clubs() if c["id"] in followed]
     # How many clubs we can ACTUALLY read right now: a demo folder, a connected
     # Instagram account, or a website. (A handle alone isn't readable without the club's consent.)
     readable = sum(1 for c in clubs if (c["instagram"] and ((DEMO_DIR / c["instagram"]).is_dir()
@@ -309,8 +312,8 @@ if __name__ == "__main__":
     if ai.FAKE:
         print("[watcher] GEMINI_FAKE=1: using fake events, Gemini is NOT being called")
     clubs = db.get_clubs()
-    print(f"[watcher] watching {sum(1 for c in clubs if c['instagram'])} Instagram accounts "
-          f"and {sum(1 for c in clubs if c.get('website'))} club websites"
+    print(f"[watcher] scanning the clubs people follow (right now: {len(db.get_followed_club_ids())} of "
+          f"{len(clubs)}): their Instagram feeds and websites"
           + ("" if run_once else f", checking every {INTERVAL}s (Ctrl+C to stop)"))
 
     last_scan = db.new_scan_request(0) or 0   # ignore requests made before we started

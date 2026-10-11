@@ -472,17 +472,18 @@ async function updateScanBar() {
     const percent = active.total ? Math.round((active.done / active.total) * 100) : 0;
     const where = active.what === "Discord announcements" ? "Discord" : "Instagram & websites";
     $("#scan-text").textContent =
-      `🔍 Scanning ${where}: ${active.current || "..."} (${Math.min(active.done + 1, active.total)} of ${active.total})` +
+      `🔍 Scanning ${where}: ${active.current || "..."} (${Math.min(active.done + 1, active.total)} of ${active.total} followed)` +
       (active.new_events ? ` · ${active.new_events} new event${active.new_events === 1 ? "" : "s"}` : "");
     $("#scan-fill").style.width = `${percent}%`;
     bar.classList.remove("hidden", "idle");
   } else if (w || b) {
     // Idle: a short summary, and when the next automatic check happens.
     const next = w && w.next_check ? Math.max(0, Math.round(w.next_check - Date.now() / 1000)) : null;
-    const sources = (w ? w.readable_clubs : 0) + (b ? b.readable_clubs : 0);
-    $("#scan-text").textContent =
-      `✓ Watching ${sources} club source${sources === 1 ? "" : "s"} · ${status.total_events} event${status.total_events === 1 ? "" : "s"} found` +
-      (next !== null ? ` · next check in ${next}s` : "");
+    const followed = w ? w.total : 0;   // the watcher only scans followed clubs
+    $("#scan-text").textContent = followed === 0
+      ? "Follow clubs on the Discover tab to start scanning for their events"
+      : `✓ Scanning ${followed} followed club${followed === 1 ? "" : "s"} · ${status.total_events} event${status.total_events === 1 ? "" : "s"} found` +
+        (next !== null ? ` · next check in ${next}s` : "");
     bar.classList.remove("hidden");
     bar.classList.add("idle");
   } else {

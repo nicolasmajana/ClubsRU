@@ -81,6 +81,9 @@ def api_follow():
 
     if data.get("follow", True):
         db.follow(user_id, club_id)
+        # Only followed clubs get scanned, so a newly followed club may have never been
+        # checked. Ask the watcher and bot to scan now, so its events appear within seconds.
+        db.request_scan()
     else:
         db.unfollow(user_id, club_id)
     return jsonify({"ok": True})
