@@ -165,6 +165,7 @@ def load_clubs_from_csv(path=CSV_PATH):
         rows = list(csv.DictReader(f))
 
     count = 0
+    loaded_ids = []   # every club id in the CSV, used below to find clubs that were removed
     with closing(get_conn()) as conn:
         for row in rows:
             # .get("name") returns None instead of crashing if the column is missing.
@@ -210,6 +211,21 @@ def load_clubs_from_csv(path=CSV_PATH):
                     verified = excluded.verified
             """, club)
             count += 1
+            loaded_ids.append(club["id"])
+
+        # Remove clubs that are no longer in the CSV (e.g. your teammate renamed or deleted one),
+        # so they stop showing on the site. Their follows go too. Clubs that already have events
+        # are kept, so we never lose events the bot collected.
+        # "?, ?, ?" is built to match how many ids we have: NOT IN (?, ?, ?, ...)
+        placeholders = ", ".join("?" for _ in loaded_ids)
+        stale = f"""SELECT id FROM clubs WHERE id NOT IN ({placeholders})
+                    AND id NOT IN (SELECT club_id FROM events)"""
+        # Safety: if the CSV came back empty (broken file), don't wipe every club.
+        stale_rows = conn.execute(stale, loaded_ids).fetchall() if loaded_ids else []
+        for (stale_id,) in stale_rows:
+            conn.execute("DELETE FROM follows WHERE club_id = ?", (stale_id,))
+            conn.execute("DELETE FROM clubs WHERE id = ?", (stale_id,))
+            print(f"[db] removed club no longer in the CSV: {stale_id}")
 
         conn.commit()  # save all the inserts at once
     return count
