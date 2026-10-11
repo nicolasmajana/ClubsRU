@@ -2,7 +2,7 @@
 
 **Every Rutgers club event in one calendar, collected automatically from Instagram and Discord.**
 
-🔗 **Live demo:** _link coming soon_ (online only while our demo laptop is running it)
+🔗 **Live demo:** https://naturally-terrorist-housewares-sheriff.trycloudflare.com (online only while our demo laptop is running it)
 🏆 Built at [HackRU Fall 2026](https://hackru-fall-2026.devpost.com/)
 
 ---
