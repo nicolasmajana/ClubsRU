@@ -89,6 +89,7 @@ def init_db():
                 campus           TEXT,
                 tags             TEXT,               -- stored like "coding;career;cs" (split on ";" when needed)
                 getinvolved_url  TEXT,
+                website          TEXT,               -- the club's own website (the watcher reads it)
                 verified         TEXT,
                 discord_guild_id TEXT                -- the Discord server linked to this club (bot fills it in)
             );
@@ -123,7 +124,7 @@ def init_db():
             -- Posts the Instagram watcher (watcher.py) has already read, so each post is
             -- sent to Gemini only ONCE, no matter how many times the watcher checks.
             CREATE TABLE IF NOT EXISTS seen_posts (
-                source   TEXT NOT NULL,   -- "instagram" or "instagram-demo"
+                source   TEXT NOT NULL,   -- "instagram", "instagram-demo" or "website"
                 post_id  TEXT NOT NULL,   -- the post's id from that source
                 club_id  TEXT,
                 events_found INTEGER DEFAULT 0,
@@ -131,6 +132,14 @@ def init_db():
                 PRIMARY KEY (source, post_id)
             );
         """)
+
+        # MIGRATION: databases created before we added the "website" column don't have it.
+        # "CREATE TABLE IF NOT EXISTS" never changes an existing table, so add the column by hand.
+        # PRAGMA table_info lists a table's columns; row[1] is each column's name.
+        columns = [row[1] for row in conn.execute("PRAGMA table_info(clubs)")]
+        if "website" not in columns:
+            conn.execute("ALTER TABLE clubs ADD COLUMN website TEXT")
+            conn.commit()
 
 
 def instagram_handle(value):
@@ -207,6 +216,8 @@ def load_clubs_from_csv(path=CSV_PATH):
                 "campus": (row.get("campus") or "").strip(),
                 "tags": (row.get("tags") or "").strip(),
                 "getinvolved_url": (row.get("getinvolved_url") or "").strip(),
+                # Optional "website" column in the CSV: the club's own site (not Instagram/Suitable).
+                "website": (row.get("website") or "").strip(),
                 "verified": (row.get("verified") or "").strip(),
             }
 
@@ -218,9 +229,9 @@ def load_clubs_from_csv(path=CSV_PATH):
             # ":name" style placeholders are filled from a dict by key, instead of "?" by position.
             conn.execute("""
                 INSERT INTO clubs (id, name, category, description, instagram, discord_invite,
-                                   campus, tags, getinvolved_url, verified)
+                                   campus, tags, getinvolved_url, website, verified)
                 VALUES (:id, :name, :category, :description, :instagram, :discord_invite,
-                        :campus, :tags, :getinvolved_url, :verified)
+                        :campus, :tags, :getinvolved_url, :website, :verified)
                 ON CONFLICT(id) DO UPDATE SET
                     name = excluded.name,
                     category = excluded.category,
@@ -230,6 +241,7 @@ def load_clubs_from_csv(path=CSV_PATH):
                     campus = excluded.campus,
                     tags = excluded.tags,
                     getinvolved_url = excluded.getinvolved_url,
+                    website = excluded.website,
                     verified = excluded.verified
             """, club)
             count += 1

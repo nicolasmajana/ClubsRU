@@ -7,6 +7,7 @@
 import os                        # Reads environment variables (our API key).
 import re                        # Finds "retry in 15s" inside Gemini's rate-limit errors.
 import time                      # time.sleep() for waiting between retries.
+import threading                 # A Lock, so key rotation stays correct when calls happen at once.
 from datetime import datetime, timedelta  # Dates and times. timedelta = "a length of time" (e.g. 1 day).
 from zoneinfo import ZoneInfo    # Time zones. Rutgers is in "America/New_York".
 from typing import Literal       # Lets us say "this field must be one of these exact values".
@@ -35,9 +36,30 @@ EASTERN = ZoneInfo("America/New_York")
 # the daily quota. Set it to 0 to test the real thing and for the demo.
 FAKE = os.environ.get("GEMINI_FAKE") == "1"
 
-# The client is the object that sends requests to Gemini. It reads GEMINI_API_KEY itself
-# if we don't pass it, but passing it explicitly makes the dependency obvious.
-client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
+# API KEYS: we can have more than one (GEMINI_API_KEY, GEMINI_API_KEY_2, GEMINI_API_KEY_3...).
+# Every request uses the NEXT key in turn: key 1, key 2, key 1, key 2...
+# A "client" is the object that sends requests to Gemini; we make one per key.
+API_KEYS = [os.environ[name] for name in ["GEMINI_API_KEY", "GEMINI_API_KEY_2", "GEMINI_API_KEY_3"]
+            if os.environ.get(name)]
+clients = [genai.Client(api_key=key) for key in API_KEYS] or [genai.Client(api_key=None)]
+
+# The bot runs Gemini calls in background threads, so two calls could pick a key at the
+# exact same moment. A Lock makes them take turns, so the rotation never skips or repeats.
+_key_lock = threading.Lock()
+_next_key = 0
+
+
+def next_client():
+    """Return the client for the next key in the rotation."""
+    global _next_key   # "global" = we're changing the variable defined outside this function
+    with _key_lock:
+        chosen = clients[_next_key % len(clients)]
+        _next_key += 1
+    return chosen
+
+
+# Kept so older test snippets that use ai.client still work (it's the first key's client).
+client = clients[0]
 
 
 # ----------------------------------------------------------------------
@@ -80,7 +102,9 @@ CAMPUS_HINTS = """Rutgers-New Brunswick buildings by campus:
 def build_prompt(text, club_name, posted_at):
     # strftime formats a date as text: "%A, %B %d, %Y" -> "Saturday, October 10, 2026".
     # Gemini needs the post's date to turn "this Friday" or "tmrw" into a real date.
-    posted = posted_at.strftime("%A, %B %d, %Y")
+    # Include the TIME too: a post made Saturday at 9 PM saying "this Saturday 8am"
+    # can't mean today (8 AM already passed), so it must mean next Saturday.
+    posted = posted_at.strftime("%A, %B %d, %Y at %I:%M %p")
     club_line = f' by the club "{club_name}"' if club_name else ""
 
     # An f-string (f"...") inserts variables wherever you write {variable}.
@@ -91,6 +115,8 @@ def build_prompt(text, club_name, posted_at):
 The post was published on {posted}{club_line}.
 - Resolve relative dates ("tomorrow", "tmrw", "this Friday", "next Tuesday") relative to that publish date.
 - If no year is given, use the next date on or after the publish date.
+- An event can't start before the post was published. If a weekday like "this Saturday" would land
+  on a time that has already passed, use the following week instead.
 - Only include real, upcoming events someone can attend (meetings, workshops, socials, trips, study sessions, competitions).
 - Do NOT include: congratulations, recaps of past events, memes, or general recruitment without a specific date.
 - If the post contains no event, return an empty events list.
@@ -281,7 +307,8 @@ def call_gemini(contents, config):
     for model in MODELS:
         for attempt in range(2):   # at most 2 tries per model
             try:
-                return client.models.generate_content(model=model, contents=contents, config=config)
+                # next_client() = the next API key in the rotation (every request switches).
+                return next_client().models.generate_content(model=model, contents=contents, config=config)
             except (errors.ServerError, errors.ClientError) as err:
                 code = getattr(err, "code", None)
                 if code not in (429, 500, 503):
@@ -299,7 +326,7 @@ def call_gemini(contents, config):
                     print(f"[ai] {model} unavailable ({code}), trying the next model...")
                     break
     # Every model failed: raise the last error so the caller can show a message.
-    raise last_error
+    raise last_error or RuntimeError("No Gemini models are configured")
 
 
 def fake_extract(text, posted_at):

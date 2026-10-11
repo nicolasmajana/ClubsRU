@@ -28,9 +28,12 @@
 # blocked quickly, which would break the demo.
 
 import os
+import re
 import sys
 import json
 import time
+import hashlib                  # makes a short "fingerprint" of a web page's text
+from html import unescape       # turns &amp; into & etc.
 from pathlib import Path
 from datetime import datetime, timedelta
 
@@ -148,6 +151,57 @@ def demo_posts(handle):
 
 
 # ----------------------------------------------------------------------
+# Source C: the club's own website
+# ----------------------------------------------------------------------
+# Many clubs list upcoming events on their website. We download the page, keep only the
+# visible text, and treat the whole page as one "post". The trick: the post id includes a
+# FINGERPRINT (hash) of the text. Same text = same id = already seen = no Gemini call.
+# When the club edits the page (adds an event), the text changes, the fingerprint changes,
+# and it's read again. Because events are deduped in db.save_event(), events that were
+# already on the page don't get duplicated.
+#
+# Limitation: pages built entirely with JavaScript (like Rutgers' Suitable/getINVOLVED
+# pages) look empty to a program, so they're skipped.
+
+WEB_EVERY = timedelta(minutes=int(os.environ.get("WEB_CHECK_MINUTES", "30")))  # be polite to club websites
+_last_web_check = {}   # website URL -> when we last downloaded it
+MAX_PAGE_CHARS = 15000  # long pages get cut, so one page can't eat a huge Gemini request
+
+
+def website_posts(url):
+    now = datetime.now(ai.EASTERN)
+    # Websites change rarely, so download each one at most every WEB_EVERY (not every minute).
+    if url in _last_web_check and now - _last_web_check[url] < WEB_EVERY:
+        return []
+    _last_web_check[url] = now
+
+    response = httpx.get(url, timeout=20, follow_redirects=True,
+                         headers={"User-Agent": "Mozilla/5.0 (club event calendar; HackRU 2026)"})
+    response.raise_for_status()
+    text = page_text(response.text)[:MAX_PAGE_CHARS]
+    if len(text) < 200:
+        return []   # basically empty: probably a JavaScript-only page
+
+    fingerprint = hashlib.sha256(text.encode("utf-8")).hexdigest()[:16]
+    return [{
+        "source": "website",
+        "post_id": f"{url}#{fingerprint}",
+        "caption": text,
+        "posted_at": now,
+        "url": url,
+        "load_image": None,
+    }]
+
+
+def page_text(html):
+    """Turn HTML into readable text: drop scripts/styles, then all tags, then extra spaces."""
+    html = re.sub(r"<(script|style|noscript)\b.*?</\1>", " ", html, flags=re.S | re.I)
+    text = re.sub(r"<[^>]+>", " ", html)          # remove every <tag>
+    text = unescape(text)                         # "&amp;" -> "&", "&nbsp;" -> " "
+    return re.sub(r"\s+", " ", text).strip()      # collapse runs of whitespace
+
+
+# ----------------------------------------------------------------------
 # One check of every club
 # ----------------------------------------------------------------------
 
@@ -158,17 +212,23 @@ def check_all_clubs():
 
     for club in db.get_clubs():
         handle = club["instagram"]
-        if not handle:
-            continue
+        posts = []
 
-        # Use the official API if this club connected its account, plus the demo folder if it has one.
-        try:
-            posts = demo_posts(handle)
-            if handle in accounts:
-                posts += api_posts(handle, accounts[handle]["access_token"])
-        except Exception as err:
-            print(f"[watcher] couldn't read @{handle}: {err}")
-            continue
+        # Instagram: the official API if this club connected its account, plus the demo folder.
+        if handle:
+            try:
+                posts += demo_posts(handle)
+                if handle in accounts:
+                    posts += api_posts(handle, accounts[handle]["access_token"])
+            except Exception as err:
+                print(f"[watcher] couldn't read @{handle}: {err}")
+
+        # The club's own website, if it has one.
+        if club.get("website"):
+            try:
+                posts += website_posts(club["website"])
+            except Exception as err:
+                print(f"[watcher] couldn't read {club['website']}: {err}")
 
         for post in posts:
             if db.is_post_seen(post["source"], post["post_id"]):
@@ -187,7 +247,8 @@ def check_all_clubs():
 def process_post(club, post):
     """Send one new post to Gemini and save what it finds. Returns the number of events saved."""
     image_bytes, mime_type = (post["load_image"]() if post["load_image"] else (None, None))
-    print(f"[watcher] new post from @{club['instagram']}: {post['post_id']}")
+    where = "website" if post["source"] == "website" else f"@{club['instagram']}"
+    print(f"[watcher] new post from {where} ({club['id']}): {post['post_id'][:70]}")
 
     try:
         events = ai.extract_events(
@@ -204,7 +265,7 @@ def process_post(club, post):
 
     for event in events:
         event["club_id"] = club["id"]
-        event["source"] = "instagram"
+        event["source"] = "website" if post["source"] == "website" else "instagram"
         event["source_url"] = post["url"]
         db.save_event(event)
         print(f"[watcher]   + {event['title']} ({event['start']})")
@@ -224,7 +285,9 @@ if __name__ == "__main__":
     run_once = "--once" in sys.argv
     if ai.FAKE:
         print("[watcher] GEMINI_FAKE=1: using fake events, Gemini is NOT being called")
-    print(f"[watcher] watching {sum(1 for c in db.get_clubs() if c['instagram'])} club Instagram accounts"
+    clubs = db.get_clubs()
+    print(f"[watcher] watching {sum(1 for c in clubs if c['instagram'])} Instagram accounts "
+          f"and {sum(1 for c in clubs if c.get('website'))} club websites"
           + ("" if run_once else f", checking every {INTERVAL}s (Ctrl+C to stop)"))
 
     while True:
