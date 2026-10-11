@@ -383,3 +383,27 @@ dialog h2 { margin-top: 0; font-size: 1.8rem; }
   #calendar .fc-daygrid-day-number { font-size: 1.1rem; }
   .preview .two { grid-template-columns: 1fr; }
 }
+
+/* ---------- background scan bar (bottom of the page) ----------
+   Shows what the watcher / Discord bot are scanning. Uses the theme colors above. */
+.scan-bar {
+  position: fixed;
+  left: 50%;
+  bottom: 14px;
+  transform: translateX(-50%);
+  z-index: 20;
+  width: min(560px, calc(100vw - 32px));
+  background: var(--maroon-dark);
+  color: var(--cream);
+  border: 1px solid rgba(223, 198, 148, 0.35);
+  border-radius: 999px;
+  padding: 8px 18px 10px;
+  font-family: var(--sans);
+  font-size: 0.82rem;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25);
+}
+.scan-bar span { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.scan-track { height: 4px; margin-top: 6px; border-radius: 999px; background: rgba(245, 239, 225, 0.18); overflow: hidden; }
+.scan-fill { height: 100%; width: 0; background: var(--gold); border-radius: 999px; transition: width 0.4s ease; }
+.scan-bar.idle .scan-track { display: none; }
+.scan-bar.idle { opacity: 0.85; }

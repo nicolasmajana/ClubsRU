@@ -59,8 +59,18 @@ function clubColor(clubId) {
   return CLUB_COLORS[hash % CLUB_COLORS.length];
 }
 
-// "2026-10-14T19:30" -> "Wed, Oct 14 · 7:30 PM"
+// An ALL-DAY event is stored as just a date ("2026-10-14"), with no time.
+const isAllDay = (start) => start.length === 10;
+
+// "2026-10-14T19:30" -> "Wed, Oct 14 · 7:30 PM"     "2026-10-14" -> "Wed, Oct 14 · All day"
 function prettyDate(start) {
+  if (isAllDay(start)) {
+    // Add a time before parsing: a bare date is read as UTC midnight, which is the
+    // PREVIOUS evening in New Jersey and would show the wrong day.
+    return new Date(start + "T12:00").toLocaleDateString("en-US", {
+      weekday: "short", month: "short", day: "numeric",
+    }) + " · All day";
+  }
   return new Date(start).toLocaleString("en-US", {
     weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit",
   }).replace(/, (\d+:)/, " · $1");   // "Wed, Oct 14, 7:30 PM" -> "Wed, Oct 14 · 7:30 PM"
@@ -70,11 +80,19 @@ function prettyDate(start) {
 function googleCalendarLink(ev) {
   // Google wants "20261014T193000". Remove "-" and ":" and add seconds.
   const fmt = (s) => s.replace(/[-:]/g, "") + "00";
-  const end = ev.end || addHour(ev.start);
+  // All-day events use plain dates ("20261014/20261015"); the end is the NEXT day.
+  const nextDay = (d) => {
+    const x = new Date(d + "T12:00");
+    x.setDate(x.getDate() + 1);
+    return x.toISOString().slice(0, 10).replace(/-/g, "");
+  };
+  const dates = isAllDay(ev.start)
+    ? `${ev.start.replace(/-/g, "")}/${nextDay(ev.start)}`
+    : `${fmt(ev.start)}/${fmt(ev.end || addHour(ev.start))}`;
   const params = new URLSearchParams({
     action: "TEMPLATE",
     text: `${ev.title} · ${ev.club_name}`,
-    dates: `${fmt(ev.start)}/${fmt(end)}`,
+    dates,
     ctz: "America/New_York",
     details: [ev.description, ev.source_url].filter(Boolean).join("\n\n"),
     location: [ev.location, ev.campus].filter(Boolean).join(", "),
@@ -135,6 +153,7 @@ function toCalendarEvent(ev) {
     title: (ev.free_food ? "🍕 " : "") + ev.title,
     start: ev.start,
     end: ev.end || undefined,
+    allDay: isAllDay(ev.start),   // shows in the all-day row instead of at a fake time
     color: clubColor(ev.club_id),
     textColor: "#7A0E18",
     extendedProps: { raw: ev },   // keep the full event so the popup can show everything
@@ -332,7 +351,7 @@ function previewForm(ev) {
     <form class="card preview">
       <label>Title <input name="title" value="${esc(ev.title)}" required></label>
       <div class="two">
-        <label>Starts <input type="datetime-local" name="start" value="${esc(ev.start)}" required></label>
+        <label>Starts <input type="datetime-local" name="start" value="${esc(isAllDay(ev.start) ? ev.start + "T12:00" : ev.start)}" required></label>
         <label>Ends <input type="datetime-local" name="end" value="${esc(ev.end || "")}"></label>
       </div>
       <div class="two">
@@ -344,6 +363,7 @@ function previewForm(ev) {
         </label>
       </div>
       <label>Description <textarea name="description" rows="2">${esc(ev.description)}</textarea></label>
+      <label class="toggle"><input type="checkbox" name="all_day" ${isAllDay(ev.start) ? "checked" : ""}> All day (no time on the flyer)</label>
       <label class="toggle"><input type="checkbox" name="free_food" ${ev.free_food ? "checked" : ""}> 🍕 Free food</label>
       <button type="submit" class="primary">Save to calendar</button>
     </form>`;
@@ -362,8 +382,9 @@ $("#extract-results").addEventListener("submit", async (e) => {
       body: JSON.stringify({
         club_id: $("#add-club").value,
         title: f.title,
-        start: f.start,
-        end: f.end || null,
+        // All day: keep only the date part ("2026-10-14") and no end time.
+        start: f.all_day ? f.start.slice(0, 10) : f.start,
+        end: f.all_day ? null : f.end || null,
         location: f.location,
         campus: f.campus,
         description: f.description,
@@ -428,6 +449,47 @@ async function loadEvents() {
   refreshCalendar();
 }
 
+
+// ======================================================================
+// Background scan bar: shows what the watcher / Discord bot are doing
+// ======================================================================
+// The watcher and bot write their progress to small files; /api/scan-status reads them.
+// Every 3 seconds we ask for it and update the bar at the bottom of the page.
+async function updateScanBar() {
+  let status;
+  try {
+    status = await api("/api/scan-status");
+  } catch {
+    return;   // server restarting: try again next time
+  }
+  const bar = $("#scan-bar");
+  const w = status.watcher;
+  const b = status.bot;
+  // Something scanning right now? Prefer showing that.
+  const active = [w, b].find((s) => s && s.running);
+
+  if (active) {
+    const percent = active.total ? Math.round((active.done / active.total) * 100) : 0;
+    const where = active.what === "Discord announcements" ? "Discord" : "Instagram & websites";
+    $("#scan-text").textContent =
+      `🔍 Scanning ${where}: ${active.current || "..."} (${Math.min(active.done + 1, active.total)} of ${active.total})` +
+      (active.new_events ? ` · ${active.new_events} new event${active.new_events === 1 ? "" : "s"}` : "");
+    $("#scan-fill").style.width = `${percent}%`;
+    bar.classList.remove("hidden", "idle");
+  } else if (w || b) {
+    // Idle: a short summary, and when the next automatic check happens.
+    const next = w && w.next_check ? Math.max(0, Math.round(w.next_check - Date.now() / 1000)) : null;
+    const sources = (w ? w.readable_clubs : 0) + (b ? b.readable_clubs : 0);
+    $("#scan-text").textContent =
+      `✓ Watching ${sources} club source${sources === 1 ? "" : "s"} · ${status.total_events} event${status.total_events === 1 ? "" : "s"} found` +
+      (next !== null ? ` · next check in ${next}s` : "");
+    bar.classList.remove("hidden");
+    bar.classList.add("idle");
+  } else {
+    bar.classList.add("hidden");   // neither program is running
+  }
+}
+
 async function start() {
   setupCalendar();
   setupSync();
@@ -436,6 +498,8 @@ async function start() {
   // Check for new events every 15 seconds, so an announcement the Discord bot just
   // picked up appears on screen without refreshing. Great for the live demo.
   setInterval(loadEvents, 15000);
+  updateScanBar();
+  setInterval(updateScanBar, 3000);
 }
 
 start();

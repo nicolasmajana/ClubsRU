@@ -126,12 +126,14 @@ def demo_posts(handle):
     # Group the files by name without the extension ("stem"): {"gbm": [gbm.png, gbm.txt]}
     groups = {}
     for file in folder.iterdir():
-        if file.suffix.lower() in IMAGE_TYPES or file.suffix.lower() == ".txt":
+        if file.suffix.lower() in IMAGE_TYPES or file.suffix.lower() in (".txt", ".url"):
             groups.setdefault(file.stem, []).append(file)
 
     posts = []
     for stem, files in groups.items():
         caption_file = next((f for f in files if f.suffix.lower() == ".txt"), None)
+        # Optional "<name>.url" file = the real Instagram post's link ("View original post").
+        link_file = next((f for f in files if f.suffix.lower() == ".url"), None)
         image_file = next((f for f in files if f.suffix.lower() in IMAGE_TYPES), None)
         # The "post time" is when the file was saved into the folder (its modified time).
         newest = max(f.stat().st_mtime for f in files)
@@ -140,7 +142,8 @@ def demo_posts(handle):
             "post_id": f"{handle}/{stem}",
             "caption": caption_file.read_text(encoding="utf-8") if caption_file else "",
             "posted_at": datetime.fromtimestamp(newest, tz=ai.EASTERN),
-            "url": f"https://www.instagram.com/{handle}/",
+            "url": (link_file.read_text(encoding="utf-8").strip() if link_file
+                    else f"https://www.instagram.com/{handle}/"),
             "load_image": (lambda f=image_file: (f.read_bytes(), IMAGE_TYPES[f.suffix.lower()]))
                           if image_file else None,
         })
@@ -209,8 +212,25 @@ def check_all_clubs():
     """Look at every club once. Returns how many new events were saved."""
     accounts = load_accounts()
     total_events = 0
+    new_posts = 0
+    clubs = db.get_clubs()
+    # How many clubs we can ACTUALLY read right now: a demo folder, a connected
+    # Instagram account, or a website. (A handle alone isn't readable without the club's consent.)
+    readable = sum(1 for c in clubs if (c["instagram"] and ((DEMO_DIR / c["instagram"]).is_dir()
+                                                           or c["instagram"] in accounts))
+                   or c.get("website"))
 
-    for club in db.get_clubs():
+    def progress(i, current, running=True):
+        db.write_status("watcher", {
+            "running": running, "what": "Instagram + club websites",
+            "current": current, "done": i, "total": len(clubs),
+            "new_posts": new_posts, "new_events": total_events,
+            "readable_clubs": readable, "updated": time.time(),
+            "next_check": time.time() + INTERVAL if not running else None,
+        })
+
+    for i, club in enumerate(clubs):
+        progress(i, club["name"])
         handle = club["instagram"]
         posts = []
 
@@ -239,8 +259,11 @@ def check_all_clubs():
                 db.mark_post_seen(post["source"], post["post_id"], club["id"], 0)
                 continue
 
+            new_posts += 1
+            progress(i, club["name"])   # update "events found" right away
             total_events += process_post(club, post)
 
+    progress(len(clubs), "", running=False)
     return total_events
 
 
@@ -290,10 +313,21 @@ if __name__ == "__main__":
           f"and {sum(1 for c in clubs if c.get('website'))} club websites"
           + ("" if run_once else f", checking every {INTERVAL}s (Ctrl+C to stop)"))
 
+    last_scan = db.new_scan_request(0) or 0   # ignore requests made before we started
     while True:
         found = check_all_clubs()
         stamp = datetime.now().strftime("%H:%M:%S")
         print(f"[watcher] {stamp} check done: {found} new event(s)")
         if run_once:
             break
-        time.sleep(INTERVAL)
+
+        # Wait INTERVAL seconds, but in 1-second steps, so a "Scan now" from the
+        # control panel starts the next check right away instead of after the wait.
+        for _ in range(INTERVAL):
+            time.sleep(1)
+            request = db.new_scan_request(last_scan)
+            if request:
+                last_scan = request
+                _last_web_check.clear()   # a manual scan re-reads websites too
+                print("[watcher] scan requested from the control panel")
+                break

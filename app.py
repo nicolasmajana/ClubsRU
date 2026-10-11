@@ -8,6 +8,7 @@
 # The bot (bot.py) runs separately. Both read and write the same database through db.py.
 
 import os
+import time
 from datetime import datetime, timedelta
 
 from flask import Flask, jsonify, request, render_template, abort, Response
@@ -106,8 +107,10 @@ def api_save_event():
         abort(400, "Pick a valid club")
     if not (event.get("title") or "").strip():
         abort(400, "Title is required")
-    if not ai.is_valid_date((event.get("start") or "")[:10]) or not ai.is_valid_time((event.get("start") or "")[11:16]):
-        abort(400, "Start must look like 2026-10-14T19:30")
+    start = event.get("start") or ""
+    # Either "2026-10-14T19:30" (a timed event) or "2026-10-14" (an all-day event).
+    if not ai.is_valid_date(start[:10]) or (len(start) > 10 and not ai.is_valid_time(start[11:16])):
+        abort(400, "Start must look like 2026-10-14T19:30 (or 2026-10-14 for all day)")
 
     # Only keep the fields we expect (ignore anything else the browser sent).
     allowed = ["club_id", "title", "description", "start", "end", "location",
@@ -169,6 +172,21 @@ def api_extract():
 # Without this, abort(400, "...") returns an HTML error page, which the JavaScript
 # can't read. This sends {"error": "the message"} instead.
 
+@app.get("/api/scan-status")
+def api_scan_status():
+    """What the background programs are doing right now, for the progress bar at the
+    bottom of the page. The watcher and the bot each write a small status file (db.write_status)."""
+    now = time.time()
+    result = {}
+    for name in ("watcher", "bot"):
+        status = db.read_status(name)
+        # A status that hasn't been updated in 3 minutes means that program isn't running.
+        if status and now - status.get("updated", 0) < 180:
+            result[name] = status
+    result["total_events"] = len(db.get_events())
+    return jsonify(result)
+
+
 @app.post("/api/recommend")
 def api_recommend():
     """STEP 8: {"interests": "I want to do software engineering"} -> recommended clubs."""
@@ -217,9 +235,14 @@ def calendar_feed(user_id):
     cal.add("x-published-ttl", "PT1H")
 
     for e in events:
-        start = to_eastern(e["start"])
-        # Events with no end time last 1 hour.
-        end = to_eastern(e["end"]) if e["end"] else start + timedelta(hours=1)
+        if len(e["start"]) == 10:
+            # ALL-DAY event: calendar apps want plain dates, and the end date is the NEXT day.
+            start = datetime.strptime(e["start"], "%Y-%m-%d").date()
+            end = start + timedelta(days=1)
+        else:
+            start = to_eastern(e["start"])
+            # Events with no end time last 1 hour.
+            end = to_eastern(e["end"]) if e["end"] else start + timedelta(hours=1)
 
         ev = Event()
         # UID = a permanent unique id. Calendar apps use it to UPDATE an event instead of
@@ -268,6 +291,8 @@ def json_error(err):
 if __name__ == "__main__":
     if ai.FAKE:
         print("[app] GEMINI_FAKE=1: flyer extraction returns fake events")
-    # debug=True: auto-restarts when you save a file and shows detailed errors.
-    # Turn it off for anything public.
-    app.run(debug=True, port=int(os.environ.get("PORT", 5000)))
+    # Debug mode auto-restarts when you save a file and shows detailed error pages, BUT
+    # those pages show our code (and a console) to anyone, including people using the
+    # public tunnel link. So it's OFF unless you set FLASK_DEBUG=1 in .env for local coding.
+    debug = os.environ.get("FLASK_DEBUG") == "1"
+    app.run(debug=debug, port=int(os.environ.get("PORT", 5000)))

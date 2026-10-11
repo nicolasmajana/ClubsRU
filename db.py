@@ -11,6 +11,8 @@ import csv                # Built into Python. Reads the clubs.csv spreadsheet y
 import re                 # Regular expressions. Used later to turn club names into short ids ("usacs").
 from pathlib import Path  # Handles file paths in a way that works on Windows, Mac and Linux.
 from contextlib import closing  # Makes sure a connection gets closed even if an error happens.
+import time               # Timestamps for the "scan now" signal.
+import json               # The small progress files the website reads.
 
 # Path(__file__) is the path of THIS file (db.py). .parent is the folder it's in (the project root).
 # Building paths from here means the database is always found in the same place,
@@ -405,6 +407,47 @@ def mark_post_seen(source, post_id, club_id, events_found):
         conn.execute("""INSERT OR REPLACE INTO seen_posts (source, post_id, club_id, events_found)
                         VALUES (?, ?, ?, ?)""", (source, post_id, club_id, events_found))
         conn.commit()
+
+
+# ----------------------------------------------------------------------
+# "Scan now" signal: the control panel asks the bot and the watcher to look for events
+# ----------------------------------------------------------------------
+# The panel, bot and watcher are separate programs, so they can't call each other's
+# functions. Instead the panel writes a small file, and the others check its timestamp
+# every few seconds: a newer timestamp than last time = "someone pressed Scan".
+
+SCAN_FLAG = BASE_DIR / "data" / "scan_request.txt"
+
+
+# Live progress ("scanning club 12 of 37") so the website can show a progress bar.
+# Each program writes its OWN small JSON file, so two programs never write the same file.
+
+def write_status(name, data):
+    path = BASE_DIR / "data" / f"status_{name}.json"
+    temp = path.with_suffix(".tmp")
+    temp.write_text(json.dumps(data), encoding="utf-8")
+    # Write to a temp file, then swap it in: the website never reads a half-written file.
+    temp.replace(path)
+
+
+def read_status(name):
+    try:
+        return json.loads((BASE_DIR / "data" / f"status_{name}.json").read_text(encoding="utf-8"))
+    except (FileNotFoundError, ValueError):
+        return None
+
+
+def request_scan():
+    SCAN_FLAG.write_text(str(time.time()), encoding="utf-8")
+
+
+def new_scan_request(last_seen):
+    """Returns the request's timestamp if there's a NEWER request than last_seen, else None."""
+    try:
+        stamp = float(SCAN_FLAG.read_text(encoding="utf-8").strip() or 0)
+    except (FileNotFoundError, ValueError):
+        return None
+    return stamp if stamp > last_seen else None
 
 
 # ----------------------------------------------------------------------

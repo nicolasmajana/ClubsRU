@@ -117,6 +117,8 @@ The post was published on {posted}{club_line}.
 - If no year is given, use the next date on or after the publish date.
 - An event can't start before the post was published. If a weekday like "this Saturday" would land
   on a time that has already passed, use the following week instead.
+- A specific date WITHOUT a year (like "Oct 8") that is a few weeks or less BEFORE the publish date is a
+  PAST event (an old post): leave it out. Never move it to next year.
 - Only include real, upcoming events someone can attend (meetings, workshops, socials, trips, study sessions, competitions).
 - Do NOT include: congratulations, recaps of past events, memes, or general recruitment without a specific date.
 - If the post contains no event, return an empty events list.
@@ -184,13 +186,19 @@ def extract_events(text="", image_bytes=None, mime_type="image/png", club_name=N
         # Skip anything without a valid date. Better to miss one than to save garbage.
         if not is_valid_date(e.date):
             continue
-        start_time = e.start_time if is_valid_time(e.start_time) else "12:00"
+        # Safety net: club events are announced weeks ahead, not many months. Something
+        # 6+ months out is almost always an old post misread as "next year", so skip it.
+        if datetime.strptime(e.date, "%Y-%m-%d").date() > (posted_at + timedelta(days=180)).date():
+            continue
+        has_time = is_valid_time(e.start_time)
         events.append({
             "title": e.title.strip(),
             "description": e.description.strip(),
-            # Combine into the format db.py stores: "2026-10-14T19:30"
-            "start": f"{e.date}T{start_time}",
-            "end": f"{e.date}T{e.end_time}" if is_valid_time(e.end_time) else None,
+            # Combine into the format db.py stores: "2026-10-14T19:30".
+            # No time on the flyer? Store ONLY the date ("2026-10-14"): that's an ALL-DAY event.
+            # (We used to guess 12:00 PM, which made events look like they were at noon.)
+            "start": f"{e.date}T{e.start_time}" if has_time else e.date,
+            "end": f"{e.date}T{e.end_time}" if has_time and is_valid_time(e.end_time) else None,
             "location": e.location.strip(),
             "campus": "" if e.campus == "Unknown" else e.campus,
             "free_food": e.free_food,

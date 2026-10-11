@@ -130,6 +130,13 @@
     </section>
   </main>
 
+  <!-- ============ BACKGROUND SCAN BAR (bottom of the page) ============ -->
+  <!-- Shows what the watcher / Discord bot are doing right now. Filled in by updateScanBar() in app.js. -->
+  <div id="scan-bar" class="scan-bar hidden" role="status" aria-live="polite">
+    <span id="scan-text"></span>
+    <div class="scan-track"><div id="scan-fill" class="scan-fill"></div></div>
+  </div>
+
   <!-- ============ EVENT DETAILS POPUP ============ -->
   <!-- <dialog> is a built-in HTML popup. app.js opens it with .showModal() -->
   <dialog id="event-dialog">

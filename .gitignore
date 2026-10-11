@@ -20,3 +20,13 @@ Thumbs.db
 
 # Instagram access tokens for clubs that connected their account (secret)
 data/instagram_accounts.json
+
+# Control panel logs
+data/logs/
+
+# Runtime files written by the watcher, bot and control panel
+data/status_*.json
+data/status_*.tmp
+data/scan_request.txt
+# Demo Instagram feed contents (copies of data/flyers made by the control panel)
+data/instagram_demo/*/
