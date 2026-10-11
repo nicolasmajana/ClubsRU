@@ -119,7 +119,28 @@ def init_db():
                 club_id TEXT NOT NULL REFERENCES clubs(id),
                 PRIMARY KEY (user_id, club_id)   -- the PAIR must be unique, so no double-follows
             );
+
+            -- Posts the Instagram watcher (watcher.py) has already read, so each post is
+            -- sent to Gemini only ONCE, no matter how many times the watcher checks.
+            CREATE TABLE IF NOT EXISTS seen_posts (
+                source   TEXT NOT NULL,   -- "instagram" or "instagram-demo"
+                post_id  TEXT NOT NULL,   -- the post's id from that source
+                club_id  TEXT,
+                events_found INTEGER DEFAULT 0,
+                seen_at  TEXT DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (source, post_id)
+            );
         """)
+
+
+def instagram_handle(value):
+    """'https://www.instagram.com/thehackru/' or '@thehackru' or 'thehackru' -> 'thehackru'"""
+    value = (value or "").strip()
+    # If it's a link, take the part right after "instagram.com/".
+    match = re.search(r"instagram\.com/([A-Za-z0-9._]+)", value)
+    if match:
+        return match.group(1)
+    return value.lstrip("@").strip("/")
 
 
 # ----------------------------------------------------------------------
@@ -180,7 +201,8 @@ def load_clubs_from_csv(path=CSV_PATH):
                 "category": (row.get("category") or "").strip(),
                 "description": (row.get("description") or "").strip(),
                 # lstrip("@") removes a leading @ in case someone typed "@usacs"
-                "instagram": (row.get("instagram") or "").strip().lstrip("@"),
+                # Store just the handle ("thehackru"), whether the CSV has a link or "@handle".
+                "instagram": instagram_handle(row.get("instagram")),
                 "discord_invite": (row.get("discord_invite") or "").strip(),
                 "campus": (row.get("campus") or "").strip(),
                 "tags": (row.get("tags") or "").strip(),
@@ -353,6 +375,24 @@ def delete_event(event_id):
         cur = conn.execute("DELETE FROM events WHERE id = ?", (event_id,))
         conn.commit()
     return cur.rowcount > 0   # rowcount = how many rows the statement changed
+
+
+# ----------------------------------------------------------------------
+# For the Instagram watcher (watcher.py): remember which posts were already read
+# ----------------------------------------------------------------------
+
+def is_post_seen(source, post_id):
+    with closing(get_conn()) as conn:
+        row = conn.execute("SELECT 1 FROM seen_posts WHERE source = ? AND post_id = ?",
+                           (source, post_id)).fetchone()
+    return row is not None
+
+
+def mark_post_seen(source, post_id, club_id, events_found):
+    with closing(get_conn()) as conn:
+        conn.execute("""INSERT OR REPLACE INTO seen_posts (source, post_id, club_id, events_found)
+                        VALUES (?, ?, ?, ?)""", (source, post_id, club_id, events_found))
+        conn.commit()
 
 
 # ----------------------------------------------------------------------
