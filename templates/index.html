@@ -14,18 +14,32 @@
 
   <!-- FullCalendar: a free library that draws the month/week calendar for us. -->
   <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.js"></script>
+  <!-- Fonts from the Canva design: Gilda Display (serif titles), Montserrat (text), Poppins (calendar numbers) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gilda+Display&family=Montserrat:wght@400;500;600;700&family=Poppins:wght@600;700;800&display=swap">
   <!-- url_for('static', ...) builds the right URL to our own files in static/ -->
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
-  <header class="topbar">
-    <div class="brand">📅 {{ app_name }}</div>
-    <!-- data-tab says which <section> each button opens (see showTab in app.js) -->
-    <nav class="tabs">
-      <button class="tab active" data-tab="calendar">My Calendar</button>
-      <button class="tab" data-tab="discover">Discover Clubs</button>
-      <button class="tab" data-tab="add">Add Event</button>
-    </nav>
+  <!-- Hero: campus photo with a scarlet tint (photo = static/hero.jpg) -->
+  <header class="hero" style="--hero-img: url('{{ url_for('static', filename='hero.jpg') }}')">
+    <div class="hero-inner">
+      <div class="hero-text">
+        <div class="wordmark">Clubs<span>RU</span></div>
+        <h1>Discover and<br>Find your club</h1>
+        <p class="lead">
+          Clubs post on Instagram and Discord, not getINVOLVED. <strong>{{ app_name }}</strong> pulls
+          their events into one calendar, synced to your Google Calendar automatically.
+        </p>
+      </div>
+      <!-- data-tab says which <section> each button opens (see showTab in app.js) -->
+      <nav class="tabs hero-menu">
+        <button class="tab" data-tab="discover">Discover Clubs</button>
+        <button class="tab active" data-tab="calendar">My Calendar</button>
+        <button class="tab" data-tab="add">Add Event</button>
+      </nav>
+    </div>
   </header>
 
   {% if fake_mode %}
@@ -33,7 +47,9 @@
   <div class="banner">Fake mode is on (GEMINI_FAKE=1): extracted events are made up, Gemini isn't called.</div>
   {% endif %}
 
-  <main>
+  <main id="main">
+    <div class="wordmark small">Clubs<span>RU</span></div>
+
     <!-- ============ TAB 1: CALENDAR ============ -->
     <section id="tab-calendar" class="panel">
       <div class="filters">
@@ -133,5 +149,11 @@
   {# Pass settings from Python to JavaScript. tojson makes the value safe to put inside a script. #}
   <script>window.PUBLIC_URL = {{ public_url | tojson }};</script>
   <script src="{{ url_for('static', filename='app.js') }}"></script>
+  <script>
+    // The menu lives in the tall hero, so after picking a tab, scroll down to its content.
+    document.querySelectorAll(".hero-menu .tab").forEach((tab) =>
+      tab.addEventListener("click", () => document.getElementById("main").scrollIntoView({ behavior: "smooth" }))
+    );
+  </script>
 </body>
 </html>

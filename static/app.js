@@ -50,11 +50,13 @@ function esc(text) {
 }
 
 // Give each club its own consistent color: turn the club id into a number (a "hash"),
-// then into a hue on the color wheel. Same id -> same color every time.
+// then pick from the light shades of our design palette (they sit on the maroon day squares,
+// with maroon text). Same id -> same color every time.
+const CLUB_COLORS = ["#DFC694", "#F5EFE1", "#AFC6D6", "#FFE6B0", "#F2B8BD", "#E9D8B4"];
 function clubColor(clubId) {
   let hash = 0;
   for (const ch of clubId) hash = (hash * 31 + ch.charCodeAt(0)) % 360;
-  return `hsl(${hash}, 65%, 45%)`;
+  return CLUB_COLORS[hash % CLUB_COLORS.length];
 }
 
 // "2026-10-14T19:30" -> "Wed, Oct 14 · 7:30 PM"
@@ -117,6 +119,7 @@ function setupCalendar() {
     headerToolbar: { left: "prev,next today", center: "title", right: "dayGridMonth,timeGridWeek,listWeek" },
     height: "auto",
     nowIndicator: true,
+    eventDisplay: "block",   // every event is a little colored tag (not a dot)
     // Instead of a fixed list, we give FullCalendar a FUNCTION. It calls it whenever it
     // needs events (on load and when we call calendar.refetchEvents()), so filters apply instantly.
     events: (info, success) => success(filteredEvents().map(toCalendarEvent)),
@@ -133,6 +136,7 @@ function toCalendarEvent(ev) {
     start: ev.start,
     end: ev.end || undefined,
     color: clubColor(ev.club_id),
+    textColor: "#7A0E18",
     extendedProps: { raw: ev },   // keep the full event so the popup can show everything
   };
 }

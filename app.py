@@ -20,7 +20,7 @@ import ai
 
 load_dotenv()
 
-APP_NAME = os.environ.get("APP_NAME", "ScarletSync")   # change the name in ONE place (.env)
+APP_NAME = os.environ.get("APP_NAME", "ClubsRU")   # change the name in ONE place (.env)
 
 # The public address of the site (e.g. a cloudflared/ngrok tunnel URL), used to build the
 # calendar subscription link. Empty = use whatever address the browser used.
