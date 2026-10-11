@@ -53,17 +53,36 @@
         You're not following any clubs yet. Go to <a href="#" data-goto="discover">Discover Clubs</a> and follow a few.
       </p>
       <div id="calendar"></div>
+
+      <!-- STEP 6: subscribe to your personal calendar feed -->
+      <div class="card sync">
+        <h2>📲 Sync to your own calendar</h2>
+        <p class="muted">Subscribe once, and events from every club you follow show up in Google Calendar automatically, including clubs you follow later.</p>
+        <div class="row">
+          <input id="feed-url" readonly>
+          <button id="copy-feed">Copy link</button>
+        </div>
+        <div class="row" style="margin-top: 10px">
+          <a id="google-sub" class="button primary" target="_blank" rel="noopener">Add to Google Calendar</a>
+          <a id="webcal-sub" class="button">Apple / Outlook</a>
+        </div>
+        <p id="localhost-warning" class="hint hidden">
+          ⚠️ You're on localhost. Google's servers can't reach your laptop, so start a tunnel
+          (see the README) and open the site through its public link before subscribing.
+        </p>
+      </div>
     </section>
 
     <!-- ============ TAB 2: DISCOVER ============ -->
     <section id="tab-discover" class="panel hidden">
       <div class="recommend card">
         <h2>Not sure where to start?</h2>
-        <p class="muted">Tell us what you're into and we'll suggest clubs. (Coming in step 8.)</p>
-        <div class="row">
-          <input id="interests" placeholder="e.g. I want to get into software engineering and meet people" disabled>
-          <button disabled>Recommend</button>
-        </div>
+        <p class="muted">Tell us what you're into and Gemini will suggest clubs that fit.</p>
+        <form id="recommend-form" class="row">
+          <input id="interests" maxlength="500" placeholder="e.g. I want to get into software engineering and meet people">
+          <button type="submit" id="recommend-btn" class="primary">✨ Recommend</button>
+        </form>
+        <div id="recommend-results"></div>
       </div>
       <div class="filters">
         <input id="club-search" placeholder="Search clubs, e.g. coding, dance, debate...">
@@ -111,6 +130,8 @@
     </div>
   </dialog>
 
+  {# Pass settings from Python to JavaScript. tojson makes the value safe to put inside a script. #}
+  <script>window.PUBLIC_URL = {{ public_url | tojson }};</script>
   <script src="{{ url_for('static', filename='app.js') }}"></script>
 </body>
 </html>

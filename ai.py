@@ -173,6 +173,97 @@ def extract_events(text="", image_bytes=None, mime_type="image/png", club_name=N
 
 
 # ----------------------------------------------------------------------
+# STEP 8: recommend clubs for a student's interests
+# ----------------------------------------------------------------------
+
+class Recommendation(BaseModel):
+    club_id: str = Field(description="Exactly one of the ids from the catalog")
+    reason: str = Field(description="One specific sentence, speaking to the student ('You'd...'), "
+                                    "connecting their goals to what this club actually does")
+
+
+class RecommendationResult(BaseModel):
+    recommendations: list[Recommendation]
+
+
+# Remember answers we already got, so the same question doesn't spend quota twice
+# (e.g. during the demo, or when someone clicks the button again).
+# Key = the interests text in lowercase. This resets when the program restarts.
+_recommend_cache = {}
+
+
+def recommend_clubs(interests, clubs, limit=5):
+    """Pick the clubs that best fit what the student says they want.
+
+    interests : free text, e.g. "I want to become a software engineer and make friends"
+    clubs     : the list from db.get_clubs()
+    Returns   : [{"club_id": "usacs", "reason": "You'd ..."}, ...] best match first
+    """
+    interests = interests.strip()
+    if not interests:
+        return []
+
+    key = interests.lower()
+    if key in _recommend_cache:
+        return _recommend_cache[key]
+
+    if FAKE:
+        result = fake_recommend(interests, clubs, limit)
+    else:
+        # The "catalog": one line per club, so Gemini knows what every club is about.
+        # This is why your teammate's descriptions and tags matter so much.
+        catalog = "\n".join(
+            f"- id: {c['id']} | {c['name']} | {c['category']} | tags: {c['tags']} | {c['description']}"
+            for c in clubs
+        )
+        prompt = f"""A Rutgers student describes what they're looking for:
+\"\"\"{interests}\"\"\"
+
+Pick up to {limit} clubs from this catalog that fit them best, best match first.
+Think about their goals (career, skills, friends, culture, fun), not just matching keywords.
+For each one, write one specific, friendly sentence to the student explaining why it fits.
+Only use ids that appear in the catalog.
+
+Catalog:
+{catalog}"""
+
+        config = types.GenerateContentConfig(
+            response_mime_type="application/json",
+            response_schema=RecommendationResult,
+            temperature=0.3,   # a little variety in the wording is fine here
+            thinking_config=types.ThinkingConfig(thinking_level="LOW"),
+        )
+        parsed = call_gemini([prompt], config).parsed
+        valid_ids = {c["id"] for c in clubs}
+        # Keep only real club ids (never trust the AI blindly), no duplicates, max `limit`.
+        result, seen = [], set()
+        for r in (parsed.recommendations if parsed else []):
+            if r.club_id in valid_ids and r.club_id not in seen:
+                seen.add(r.club_id)
+                result.append({"club_id": r.club_id, "reason": r.reason})
+        result = result[:limit]
+
+    _recommend_cache[key] = result
+    return result
+
+
+def fake_recommend(interests, clubs, limit):
+    """Fake mode: rank clubs by how many of the student's words appear in their
+    name/description/tags. Simple keyword matching, no Gemini."""
+    words = {w for w in re.findall(r"[a-z]+", interests.lower()) if len(w) > 3}
+    scored = []
+    for c in clubs:
+        text = f"{c['name']} {c['description']} {c['tags']}".lower()
+        score = sum(1 for w in words if w in text)
+        if score:
+            scored.append((score, c))
+    # sort by score, highest first. key=lambda pair: pair[0] means "sort using the score".
+    scored.sort(key=lambda pair: pair[0], reverse=True)
+    return [{"club_id": c["id"], "reason": f"[FAKE] Matches {score} of your keywords."}
+            for score, c in scored[:limit]]
+
+
+# ----------------------------------------------------------------------
 # 2.4 Helpers
 # ----------------------------------------------------------------------
 

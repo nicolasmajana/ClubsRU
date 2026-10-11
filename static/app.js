@@ -212,11 +212,9 @@ function renderClubs() {
     </article>`).join("") || `<p class="muted">No clubs match.</p>`;
 }
 
-// One click listener on the whole grid handles every Follow button ("event delegation").
-$("#club-grid").addEventListener("click", async (e) => {
-  const button = e.target.closest(".follow");
-  if (!button) return;
-  const club = clubs.find((c) => c.id === button.dataset.club);
+// Follow or unfollow a club, then redraw everything that shows follow status.
+async function toggleFollow(clubId) {
+  const club = clubs.find((c) => c.id === clubId);
   const follow = !club.followed;
 
   await api("/api/follow", {
@@ -226,11 +224,73 @@ $("#club-grid").addEventListener("click", async (e) => {
   });
   club.followed = follow ? 1 : 0;
   renderClubs();
+  renderRecommendations();
   refreshCalendar();
-});
+}
+
+// One click listener per area handles every Follow button inside it ("event delegation").
+// Used by both the club grid and the recommendation list.
+for (const area of ["#club-grid", "#recommend-results"]) {
+  $(area).addEventListener("click", (e) => {
+    const button = e.target.closest(".follow");
+    if (button) toggleFollow(button.dataset.club);
+  });
+}
 
 $("#club-search").addEventListener("input", renderClubs);
 $("#category-filter").addEventListener("change", renderClubs);
+
+// ----------------------------------------------------------------------
+// STEP 8: "Not sure where to start?" recommendations
+// ----------------------------------------------------------------------
+let recommendations = null;   // the last answer: [{club_id, reason}, ...] (null = not asked yet)
+
+$("#recommend-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const interests = $("#interests").value.trim();
+  if (!interests) return;
+
+  const button = $("#recommend-btn");
+  button.disabled = true;
+  button.textContent = "Thinking...";
+  try {
+    const data = await api("/api/recommend", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ interests }),
+    });
+    recommendations = data.recommendations;
+    renderRecommendations();
+  } catch (err) {
+    $("#recommend-results").innerHTML = `<p class="message error">${esc(err.message)}</p>`;
+  } finally {
+    button.disabled = false;
+    button.textContent = "✨ Recommend";
+  }
+});
+
+function renderRecommendations() {
+  if (recommendations === null) return;   // nothing asked yet, nothing to show
+  if (recommendations.length === 0) {
+    $("#recommend-results").innerHTML = `<p class="message muted">No strong matches. Try describing it differently, or browse the clubs below.</p>`;
+    return;
+  }
+  // Numbered list, best match first. Each row: club name, Gemini's reason, Follow button.
+  $("#recommend-results").innerHTML = `<ol class="recs">${recommendations.map((r) => {
+    const c = clubs.find((club) => club.id === r.club_id);
+    if (!c) return "";
+    return `
+      <li class="rec">
+        <div>
+          <strong>${esc(c.name)}</strong> <span class="chip">${esc(c.category)}</span>
+          <p>${esc(r.reason)}</p>
+        </div>
+        <button class="follow ${c.followed ? "following" : ""}" data-club="${esc(c.id)}">
+          ${c.followed ? "✓ Following" : "+ Follow"}
+        </button>
+      </li>`;
+  }).join("")}</ol>`;
+}
 
 // ======================================================================
 // 5.6 Add Event tab: flyer/caption -> Gemini -> review -> save
@@ -315,6 +375,34 @@ $("#extract-results").addEventListener("submit", async (e) => {
 });
 
 // ======================================================================
+// 6. Calendar subscription (Google Calendar sync)
+// ======================================================================
+function setupSync() {
+  // Our feed lives at /calendar/<your id>.ics on the server (see calendar_feed in app.py).
+  // PUBLIC_URL (from .env) wins if set, e.g. a tunnel address. Otherwise use this page's address.
+  const base = window.PUBLIC_URL || location.origin;
+  const feedUrl = `${base}/calendar/${USER_ID}.ics`;
+  // webcal:// is the same address with a different "scheme": it tells the computer
+  // "open this in the calendar app and SUBSCRIBE", instead of downloading the file once.
+  const webcalUrl = feedUrl.replace(/^https?:\/\//, "webcal://");
+
+  $("#feed-url").value = feedUrl;
+  // Google Calendar's "add calendar from URL" screen, pre-filled with our feed.
+  $("#google-sub").href = `https://calendar.google.com/calendar/r?cid=${encodeURIComponent(webcalUrl)}`;
+  $("#webcal-sub").href = webcalUrl;
+
+  // Google can't download a feed from "localhost" (that means "this laptop" to Google's servers).
+  const isLocal = /localhost|127\.0\.0\.1/.test(base);
+  $("#localhost-warning").classList.toggle("hidden", !isLocal);
+
+  $("#copy-feed").addEventListener("click", async () => {
+    await navigator.clipboard.writeText(feedUrl);
+    $("#copy-feed").textContent = "Copied!";
+    setTimeout(() => ($("#copy-feed").textContent = "Copy link"), 1500);
+  });
+}
+
+// ======================================================================
 // 5.7 Loading data and starting up
 // ======================================================================
 async function loadClubs() {
@@ -338,6 +426,7 @@ async function loadEvents() {
 
 async function start() {
   setupCalendar();
+  setupSync();
   await loadClubs();
   await loadEvents();
   // Check for new events every 15 seconds, so an announcement the Discord bot just

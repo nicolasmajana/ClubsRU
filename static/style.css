@@ -102,6 +102,9 @@ input, select, textarea {
 .toggle { display: flex; gap: 6px; align-items: center; cursor: pointer; }
 #calendar { background: var(--card); padding: 16px; border-radius: var(--radius); border: 1px solid var(--border); }
 .fc-event { cursor: pointer; }
+.sync { margin-top: 20px; }
+.sync h2 { font-size: 1.15rem; }
+#feed-url { font-family: ui-monospace, Consolas, monospace; font-size: 0.85rem; }
 
 /* ---------- discover tab ---------- */
 .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px; }
@@ -125,7 +128,20 @@ input, select, textarea {
   border-radius: 999px;
   margin-right: 4px;
 }
-.club .follow.following { background: var(--scarlet); color: white; border-color: var(--scarlet); }
+.follow.following { background: var(--scarlet); color: white; border-color: var(--scarlet); }
+
+/* recommendations (step 8) */
+.recs { padding-left: 20px; margin: 16px 0 0; }
+.rec {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+  border-top: 1px solid var(--border);
+}
+.rec p { margin: 4px 0 0; color: var(--muted); font-size: 0.92rem; }
+.rec .follow { flex-shrink: 0; }
 
 /* ---------- add event tab ---------- */
 form label { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; font-weight: 600; }

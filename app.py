@@ -8,8 +8,11 @@
 # The bot (bot.py) runs separately. Both read and write the same database through db.py.
 
 import os
+from datetime import datetime, timedelta
 
-from flask import Flask, jsonify, request, render_template, abort
+from flask import Flask, jsonify, request, render_template, abort, Response
+from werkzeug.middleware.proxy_fix import ProxyFix
+from icalendar import Calendar, Event
 from dotenv import load_dotenv
 
 import db
@@ -19,10 +22,19 @@ load_dotenv()
 
 APP_NAME = os.environ.get("APP_NAME", "ScarletSync")   # change the name in ONE place (.env)
 
+# The public address of the site (e.g. a cloudflared/ngrok tunnel URL), used to build the
+# calendar subscription link. Empty = use whatever address the browser used.
+PUBLIC_URL = os.environ.get("PUBLIC_URL", "").rstrip("/")
+
 # Flask(__name__) creates the web app. By default it looks for HTML in "templates/"
 # and for CSS/JS/images in "static/".
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 10 * 1024 * 1024    # reject uploads over 10 MB
+
+# When the site is reached through a tunnel (cloudflared/ngrok), the tunnel forwards the
+# request to localhost. ProxyFix reads the "X-Forwarded-*" headers the tunnel adds, so
+# request.host_url is the PUBLIC address (https://xyz.trycloudflare.com/), not localhost.
+app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
 
 # Make sure the tables exist and the latest clubs.csv is loaded every time the site starts.
 db.init_db()
@@ -38,7 +50,8 @@ db.load_clubs_from_csv()
 @app.get("/")
 def home():
     # render_template fills in {{ app_name }} inside templates/index.html.
-    return render_template("index.html", app_name=APP_NAME, fake_mode=ai.FAKE)
+    return render_template("index.html", app_name=APP_NAME, fake_mode=ai.FAKE,
+                           public_url=PUBLIC_URL)
 
 
 # ----------------------------------------------------------------------
@@ -155,6 +168,90 @@ def api_extract():
 # ----------------------------------------------------------------------
 # Without this, abort(400, "...") returns an HTML error page, which the JavaScript
 # can't read. This sends {"error": "the message"} instead.
+
+@app.post("/api/recommend")
+def api_recommend():
+    """STEP 8: {"interests": "I want to do software engineering"} -> recommended clubs."""
+    data = request.get_json(silent=True) or {}
+    interests = (data.get("interests") or "").strip()
+    if not interests:
+        abort(400, "Tell us a bit about what you're interested in")
+    if len(interests) > 500:
+        abort(400, "Please keep it under 500 characters")
+
+    try:
+        recs = ai.recommend_clubs(interests, db.get_clubs())
+    except Exception as err:
+        print(f"[app] Gemini error: {err}")
+        abort(502, "Gemini couldn't answer right now. Try again in a minute.")
+    return jsonify({"recommendations": recs})
+
+
+@app.get("/calendar/<user_id>.ics")
+def calendar_feed(user_id):
+    """STEP 6: a calendar FEED (.ics file) with the events of every club this user follows.
+
+    Google Calendar / Apple Calendar / Outlook can SUBSCRIBE to this URL. They download it
+    again every few hours, so new events (and newly followed clubs) show up in the student's
+    own calendar automatically, without them doing anything.
+
+    .ics ("iCalendar") is the standard text format every calendar app understands:
+        BEGIN:VEVENT
+        SUMMARY:General Body Meeting · USACS
+        DTSTART;TZID=America/New_York:20261014T193000
+        ...
+        END:VEVENT
+    The icalendar library writes that format for us.
+    """
+    events = db.get_events(user_id, followed_only=True)
+
+    cal = Calendar()
+    # Required header fields. PRODID = "which program made this file".
+    cal.add("prodid", f"-//{APP_NAME}//HackRU 2026//EN")
+    cal.add("version", "2.0")
+    # Name and color hints shown in Google/Apple Calendar's sidebar.
+    cal.add("x-wr-calname", f"{APP_NAME}: my Rutgers clubs")
+    cal.add("x-wr-timezone", "America/New_York")
+    # Ask calendar apps to re-check hourly. (Google ignores this and checks every few hours.)
+    cal.add("refresh-interval", timedelta(hours=1), parameters={"VALUE": "DURATION"})
+    cal.add("x-published-ttl", "PT1H")
+
+    for e in events:
+        start = to_eastern(e["start"])
+        # Events with no end time last 1 hour.
+        end = to_eastern(e["end"]) if e["end"] else start + timedelta(hours=1)
+
+        ev = Event()
+        # UID = a permanent unique id. Calendar apps use it to UPDATE an event instead of
+        # adding a duplicate when the feed changes (e.g. the room moved).
+        ev.add("uid", f"event-{e['id']}@{APP_NAME.lower()}")
+        ev.add("summary", f"{'🍕 ' if e['free_food'] else ''}{e['title']} · {e['club_name']}")
+        ev.add("dtstart", start)
+        ev.add("dtend", end)
+        ev.add("dtstamp", datetime.now(ai.EASTERN))
+        where = ", ".join(part for part in [e["location"], e["campus"]] if part)
+        if where:
+            ev.add("location", where)
+        details = "\n\n".join(part for part in [e["description"], e["source_url"]] if part)
+        if details:
+            ev.add("description", details)
+        if e["source_url"]:
+            ev.add("url", e["source_url"])
+        cal.add_component(ev)
+
+    # Adds the time zone definition (VTIMEZONE) for America/New_York, so every app
+    # shows the right time, even across the daylight-saving switch on Nov 1.
+    cal.add_missing_timezones()
+
+    # to_ical() produces the .ics text. The mimetype tells the calendar app what it's getting.
+    return Response(cal.to_ical(), mimetype="text/calendar",
+                    headers={"Content-Disposition": "inline; filename=clubs.ics"})
+
+
+def to_eastern(text):
+    """'2026-10-14T19:30' (stored as Eastern time) -> a datetime that knows it's Eastern."""
+    return datetime.strptime(text[:16], "%Y-%m-%dT%H:%M").replace(tzinfo=ai.EASTERN)
+
 
 @app.errorhandler(400)
 @app.errorhandler(404)
